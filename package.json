@@ -1,0 +1,26 @@
+{
+  "name": "wizard",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Play the card game Wizard online with friends",
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "apps/server",
+    "apps/web"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "build": "npm run build -w @wizard/shared && npm run build -w @wizard/server && npm run build -w @wizard/web",
+    "dev:server": "npm run dev -w @wizard/server",
+    "dev:web": "npm run dev -w @wizard/web",
+    "typecheck": "tsc --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
