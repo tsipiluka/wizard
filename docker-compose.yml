@@ -1,0 +1,8 @@
+services:
+  wizard:
+    build: .
+    image: wizard:latest
+    container_name: wizard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"

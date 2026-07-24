@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wizard-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@wizard/server"],
+      "port": 8080,
+      "autoPort": true
+    },
+    {
+      "name": "wizard-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@wizard/web"],
+      "port": 5173
+    }
+  ]
+}
