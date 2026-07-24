@@ -1,0 +1,214 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fastifyStatic from '@fastify/static';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { Server } from 'socket.io';
+import { GameError } from '@wizard/shared';
+import type { ErrorReply, ServerToClientEvents, Suit } from '@wizard/shared';
+import { RoomManager } from './rooms';
+
+const ROUND_END_DELAY_MS = 7000;
+
+type Ack = (r: Record<string, unknown> | ErrorReply) => void;
+
+export interface BuiltServer {
+  app: FastifyInstance;
+  io: Server;
+  rooms: RoomManager;
+}
+
+export async function buildServer(): Promise<BuiltServer> {
+  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+
+  app.get('/healthz', async () => ({ ok: true }));
+
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const webDist = [
+    process.env.WEB_DIST,
+    path.resolve(here, '../../web/dist'), // dev: apps/server/src -> apps/web/dist
+    path.resolve(here, '../web'), // docker: /app/server/index.js -> /app/web
+  ].find((p) => p && existsSync(p));
+
+  if (webDist) {
+    await app.register(fastifyStatic, { root: webDist });
+    app.setNotFoundHandler((req, reply) => {
+      // SPA fallback for client-side routes
+      if (req.raw.method === 'GET' && !req.url.startsWith('/socket.io')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: 'not found' });
+    });
+  } else {
+    app.log.warn('No web dist found; serving API only');
+  }
+
+  const rooms = new RoomManager();
+  const sweeper = setInterval(() => rooms.sweep(), 10 * 60 * 1000);
+  sweeper.unref();
+
+  const io = new Server(app.server, {
+    serveClient: false,
+    cors: process.env.NODE_ENV === 'development' ? { origin: true } : undefined,
+  });
+  app.addHook('onClose', async () => {
+    clearInterval(sweeper);
+    await io.close();
+  });
+
+  const roundTimers = new Map<string, NodeJS.Timeout>();
+
+  /** Push each connected socket in the room its own redacted snapshot. */
+  async function broadcast(code: string): Promise<void> {
+    if (!rooms.has(code)) return;
+    const sockets = await io.in(code).fetchSockets();
+    for (const socket of sockets) {
+      const { token } = socket.data as { token?: string };
+      if (!token) continue;
+      try {
+        socket.emit('state' satisfies keyof ServerToClientEvents, rooms.clientState(code, token));
+      } catch {
+        // player no longer in the room (left lobby); ignore
+      }
+    }
+  }
+
+  function scheduleAdvance(code: string): void {
+    clearTimeout(roundTimers.get(code));
+    roundTimers.set(
+      code,
+      setTimeout(() => {
+        roundTimers.delete(code);
+        try {
+          rooms.advance(code);
+          void broadcast(code);
+        } catch (err) {
+          app.log.error({ err, code }, 'failed to advance round');
+        }
+      }, ROUND_END_DELAY_MS),
+    );
+  }
+
+  function replyError(cb: Ack, err: unknown): void {
+    if (err instanceof GameError) {
+      cb({ ok: false, code: err.code, message: err.message });
+    } else {
+      app.log.error({ err }, 'unexpected error');
+      cb({ ok: false, code: 'internal', message: 'Something went wrong' });
+    }
+  }
+
+  io.on('connection', (socket) => {
+    const data = socket.data as { code?: string; token?: string };
+
+    /**
+     * Normalize whatever a client sent: the ack is the trailing function (or a
+     * no-op) and the payload is the first object argument. A malformed emit
+     * must never be able to throw outside this wrapper and kill the process.
+     */
+    const safe =
+      (fn: (payload: Record<string, unknown>, cb: Ack) => void) =>
+      (...args: unknown[]) => {
+        const last = args[args.length - 1];
+        const cb: Ack = typeof last === 'function' ? (last as Ack) : () => undefined;
+        const first = args[0];
+        const payload =
+          typeof first === 'object' && first !== null ? (first as Record<string, unknown>) : {};
+        try {
+          fn(payload, cb);
+        } catch (err) {
+          replyError(cb, err);
+        }
+      };
+
+    const enter = (code: string, token: string) => {
+      data.code = code;
+      data.token = token;
+      void socket.join(code);
+      void broadcast(code);
+    };
+
+    /** Run a game intent, ack it, then broadcast the new state to the room. */
+    const intent = (fn: (code: string, token: string) => void) =>
+      safe((_payload, cb) => {
+        if (!data.code || !data.token) throw new GameError('no_room', 'You are not in a room');
+        const code = data.code;
+        fn(code, data.token);
+        cb({ ok: true });
+        void broadcast(code);
+        try {
+          if (data.token && rooms.clientState(code, data.token).phase === 'roundEnd') {
+            scheduleAdvance(code);
+          }
+        } catch (err) {
+          app.log.error({ err, code }, 'post-intent bookkeeping failed');
+        }
+      });
+
+    socket.on(
+      'room:create',
+      safe((payload, cb) => {
+        const { code, token } = rooms.create(String(payload.name ?? ''));
+        enter(code, token);
+        cb({ ok: true, code, token });
+      }),
+    );
+
+    socket.on(
+      'room:join',
+      safe((payload, cb) => {
+        const code = String(payload.code ?? '').trim().toUpperCase();
+        const token = typeof payload.token === 'string' ? payload.token : undefined;
+        const name = payload.name === undefined ? undefined : String(payload.name);
+        const result = rooms.join(code, name, token);
+        enter(code, result.token);
+        cb({ ok: true, token: result.token });
+      }),
+    );
+
+    socket.on(
+      'room:leave',
+      safe((_payload, cb) => {
+        if (!data.code || !data.token) throw new GameError('no_room', 'You are not in a room');
+        const left = data.code;
+        rooms.leave(left, data.token);
+        void socket.leave(left);
+        data.code = undefined;
+        data.token = undefined;
+        cb({ ok: true });
+        void broadcast(left);
+      }),
+    );
+
+    socket.on('room:start', intent((code, token) => rooms.start(code, token)));
+    socket.on('room:again', intent((code, token) => rooms.again(code, token)));
+
+    socket.on('game:chooseTrump', (...args: unknown[]) => {
+      const payload = (typeof args[0] === 'object' && args[0]) || {};
+      intent((code, token) =>
+        rooms.chooseTrump(code, token, (payload as { suit?: Suit }).suit as Suit),
+      )(...args);
+    });
+    socket.on('game:bid', (...args: unknown[]) => {
+      const payload = (typeof args[0] === 'object' && args[0]) || {};
+      intent((code, token) =>
+        rooms.bid(code, token, Number((payload as { bid?: unknown }).bid)),
+      )(...args);
+    });
+    socket.on('game:play', (...args: unknown[]) => {
+      const payload = (typeof args[0] === 'object' && args[0]) || {};
+      intent((code, token) =>
+        rooms.play(code, token, String((payload as { cardId?: unknown }).cardId)),
+      )(...args);
+    });
+
+    socket.on('disconnect', () => {
+      if (data.code && data.token) {
+        rooms.setConnected(data.code, data.token, false);
+        void broadcast(data.code);
+      }
+    });
+  });
+
+  return { app, io, rooms };
+}

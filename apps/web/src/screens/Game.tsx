@@ -110,7 +110,7 @@ export function Game({
                 {state.dealerIndex === i && <span className="seatchip__dealer" title="Dealer">✦</span>}
               </span>
               <span className="seatchip__meta">
-                {p.bid !== null ? `${p.tricksWon}/${p.bid}` : '· · ·'}
+                {p.bid !== null ? `bid ${p.bid} · took ${p.tricksWon}` : '· · ·'}
               </span>
               <span className="seatchip__score">{p.score}</span>
             </div>
@@ -150,7 +150,7 @@ export function Game({
             {state.dealerIndex === seat && <span className="seatchip__dealer"> ✦</span>}
           </span>
           <span className="game__mebid">
-            {me.bid !== null ? `tricks ${me.tricksWon}/${me.bid}` : ''}
+            {me.bid !== null ? `bid ${me.bid} · took ${me.tricksWon}` : ''}
           </span>
           <span className="game__mescore">{me.score}</span>
         </div>
