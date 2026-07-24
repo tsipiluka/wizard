@@ -1,3 +1,5 @@
+export * from './protocol';
+
 export type Suit = 'red' | 'yellow' | 'green' | 'blue';
 export const SUITS: readonly Suit[] = ['red', 'yellow', 'green', 'blue'];
 
