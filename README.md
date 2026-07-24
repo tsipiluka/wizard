@@ -23,18 +23,40 @@ apps/web          React + Vite client
 
 ## Deploy on Portainer
 
-**Option A — stack from this repository (recommended):**
+Every push to `main` builds and publishes `ghcr.io/tsipiluka/wizard:latest`
+(amd64 + arm64) via GitHub Actions, after the test suite passes.
+
+**Option A — pull the published image (recommended):**
+
+1. Portainer → *Stacks* → *Add stack* → *Web editor*, paste:
+
+   ```yaml
+   services:
+     wizard:
+       image: ghcr.io/tsipiluka/wizard:latest
+       restart: unless-stopped
+       ports:
+         - "8080:8080"
+   ```
+
+2. Deploy. Re-pull the image + redeploy the stack to update.
+
+> **Note:** GHCR packages start out private. Either make the package public
+> (GitHub → your profile → *Packages* → `wizard` → *Package settings* →
+> *Change visibility*), or add `ghcr.io` registry credentials in Portainer
+> (*Registries* → *Add registry*, username = GitHub handle, password = a
+> classic PAT with `read:packages`).
+
+**Option B — build from this repository:**
 
 1. Portainer → *Stacks* → *Add stack* → *Repository*.
-2. Repository URL: `https://github.com/tsipiluka/wizard`, compose path `docker-compose.yml`.
-3. Deploy. The app listens on port **8080** (adjust the port mapping in the stack
-   editor if it clashes).
+2. Repository URL: `https://github.com/tsipiluka/wizard`, compose path
+   `docker-compose.yml` (this builds the image on the Portainer host).
 
-**Option B — prebuilt image:**
+**Option C — plain Docker:**
 
 ```bash
-docker build -t wizard .
-docker run -d --name wizard -p 8080:8080 --restart unless-stopped wizard
+docker run -d --name wizard -p 8080:8080 --restart unless-stopped ghcr.io/tsipiluka/wizard:latest
 ```
 
 Put it behind your reverse proxy (Traefik/NPM/Caddy) with WebSocket support enabled
