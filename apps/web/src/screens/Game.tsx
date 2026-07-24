@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClientState, Suit, TrickPlay } from '@wizard/shared';
-import { JESTER_ICON, PlayingCard, SUIT_ICONS, WIZARD_ICON, sortHand } from '../cards';
+import { PlayingCard, SUIT_ICONS, sortHand } from '../cards';
 
 const SUIT_NAMES: Record<Suit, string> = {
   red: 'Embers',
@@ -87,7 +87,6 @@ export function Game({
             {state.round}<em>/{state.totalRounds}</em>
           </span>
         </div>
-        <TrumpBadge state={state} />
         <button className="btn btn--ghost btn--small" onClick={() => setShowScores(true)}>
           Scores
         </button>
@@ -119,28 +118,60 @@ export function Game({
       </section>
 
       <section className="game__table">
+        <TableTrump state={state} />
         <p className="game__status" key={statusLine}>
           {statusLine}
         </p>
-        <div className="trick">
-          {trick.length === 0 && !showRoundEnd && (
-            <div className="trick__empty" aria-hidden>
-              ✦
+        {showTrump ? (
+          <div className="tableprompt">
+            <div className="trumppick">
+              {(Object.keys(SUIT_NAMES) as Suit[]).map((s) => (
+                <button
+                  key={s}
+                  className={`trumppick__suit trumppick__suit--${s}`}
+                  onClick={() => onChooseTrump(s)}
+                >
+                  <span className="trumppick__icon">{SUIT_ICONS[s]}</span>
+                  {SUIT_NAMES[s]}
+                </button>
+              ))}
             </div>
-          )}
-          {trick.map((play, idx) => (
-            <div
-              className={`trick__play ${winnerIndex === play.playerIndex ? 'trick__play--winner' : ''}`}
-              key={play.card.id}
-              style={{ ['--i' as string]: idx }}
-            >
-              <PlayingCard card={play.card} size="md" />
-              <span className="trick__who">
-                {play.playerIndex === seat ? 'you' : players[play.playerIndex]!.name}
-              </span>
+          </div>
+        ) : showBid ? (
+          <div className="tableprompt">
+            <p className="veil-note">
+              {state.players.reduce((sum, p) => sum + (p.bid ?? 0), 0)} of {state.round} tricks
+              claimed so far
+            </p>
+            <div className="bidgrid">
+              {Array.from({ length: state.round + 1 }, (_, b) => (
+                <button key={b} className="bidgrid__btn" onClick={() => onBid(b)}>
+                  {b}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="trick">
+            {trick.length === 0 && !showRoundEnd && (
+              <div className="trick__empty" aria-hidden>
+                ✦
+              </div>
+            )}
+            {trick.map((play, idx) => (
+              <div
+                className={`trick__play ${winnerIndex === play.playerIndex ? 'trick__play--winner' : ''}`}
+                key={play.card.id}
+                style={{ ['--i' as string]: idx }}
+              >
+                <PlayingCard card={play.card} size="md" />
+                <span className="trick__who">
+                  {play.playerIndex === seat ? 'you' : players[play.playerIndex]!.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <footer className="game__me">
@@ -168,21 +199,6 @@ export function Game({
           ))}
         </div>
       </footer>
-
-      {showTrump && (
-        <Sheet title="Choose the trump suit">
-          <div className="trumppick">
-            {(Object.keys(SUIT_NAMES) as Suit[]).map((s) => (
-              <button key={s} className={`trumppick__suit trumppick__suit--${s}`} onClick={() => onChooseTrump(s)}>
-                <span className="trumppick__icon">{SUIT_ICONS[s]}</span>
-                {SUIT_NAMES[s]}
-              </button>
-            ))}
-          </div>
-        </Sheet>
-      )}
-
-      {showBid && <BidSheet state={state} onBid={onBid} />}
 
       {showRoundEnd && roundScores && (
         <Sheet title={`Round ${state.round} — the reckoning`}>
@@ -212,41 +228,26 @@ export function Game({
   );
 }
 
-function TrumpBadge({ state }: { state: ClientState }) {
-  if (state.trumpSuit) {
-    return (
-      <div className={`trump trump--${state.trumpSuit}`}>
-        <span className="trump__icon">{SUIT_ICONS[state.trumpSuit]}</span>
-        <span className="trump__label">trump</span>
-      </div>
-    );
-  }
-  const flip = state.trumpCard;
+/** The flipped trump card, sitting in the middle of the table like on a real one. */
+function TableTrump({ state }: { state: ClientState }) {
+  const card = state.trumpCard;
   return (
-    <div className="trump trump--none">
-      <span className="trump__icon">
-        {flip?.kind === 'wizard' ? WIZARD_ICON : flip?.kind === 'jester' ? JESTER_ICON : '—'}
+    <div className="tabletrump">
+      {card && <PlayingCard card={card} size="sm" />}
+      <span
+        className={`tabletrump__chip ${state.trumpSuit ? `tabletrump__chip--${state.trumpSuit}` : ''}`}
+      >
+        {state.trumpSuit ? (
+          <>
+            <span className="tabletrump__icon">{SUIT_ICONS[state.trumpSuit]}</span> trump
+          </>
+        ) : card?.kind === 'wizard' ? (
+          'trump being chosen…'
+        ) : (
+          'no trump'
+        )}
       </span>
-      <span className="trump__label">{flip?.kind === 'wizard' ? 'choosing…' : 'no trump'}</span>
     </div>
-  );
-}
-
-function BidSheet({ state, onBid }: { state: ClientState; onBid: (bid: number) => void }) {
-  const bidsSoFar = state.players.reduce((sum, p) => sum + (p.bid ?? 0), 0);
-  return (
-    <Sheet title={`Round ${state.round} — how many tricks?`}>
-      <p className="veil-note">
-        {bidsSoFar} of {state.round} tricks claimed so far
-      </p>
-      <div className="bidgrid">
-        {Array.from({ length: state.round + 1 }, (_, b) => (
-          <button key={b} className="bidgrid__btn" onClick={() => onBid(b)}>
-            {b}
-          </button>
-        ))}
-      </div>
-    </Sheet>
   );
 }
 
