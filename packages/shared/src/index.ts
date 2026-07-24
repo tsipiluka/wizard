@@ -158,10 +158,30 @@ export function chooseTrump(state: GameState, playerIndex: number, suit: Suit): 
   };
 }
 
+/**
+ * The bid the final bidder is barred from: the one that would make all bids
+ * sum to the round's trick count (so at least one player must miss).
+ * Null when the player is not the last bidder or the difference is out of range.
+ */
+export function forbiddenBid(state: GameState, playerIndex: number): number | null {
+  if (state.phase !== 'bidding') return null;
+  const pending = state.bids.filter((b) => b === null).length;
+  if (pending !== 1 || state.bids[playerIndex] !== null) return null;
+  const others = state.bids.reduce((sum: number, b) => sum + (b ?? 0), 0);
+  const gap = state.round - others;
+  return gap >= 0 && gap <= state.round ? gap : null;
+}
+
 export function placeBid(state: GameState, playerIndex: number, bid: number): GameState {
   assertTurn(state, playerIndex, 'bidding');
   if (!Number.isInteger(bid) || bid < 0 || bid > state.round) {
     throw new GameError('invalid_bid', `Bid must be between 0 and ${state.round}`);
+  }
+  if (bid === forbiddenBid(state, playerIndex)) {
+    throw new GameError(
+      'bid_total_forbidden',
+      `The bids may not add up to exactly ${state.round} — choose another number`,
+    );
   }
   const bids = [...state.bids];
   bids[playerIndex] = bid;

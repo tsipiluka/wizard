@@ -138,19 +138,37 @@ export function Game({
             </div>
           </div>
         ) : showBid ? (
-          <div className="tableprompt">
-            <p className="veil-note">
-              {state.players.reduce((sum, p) => sum + (p.bid ?? 0), 0)} of {state.round} tricks
-              claimed so far
-            </p>
-            <div className="bidgrid">
-              {Array.from({ length: state.round + 1 }, (_, b) => (
-                <button key={b} className="bidgrid__btn" onClick={() => onBid(b)}>
-                  {b}
-                </button>
-              ))}
-            </div>
-          </div>
+          (() => {
+            const claimed = state.players.reduce((sum, p) => sum + (p.bid ?? 0), 0);
+            // last bidder may not make the total land exactly on the round number
+            const amLast = state.players.filter((p) => p.bid === null).length === 1;
+            const forbidden = amLast ? state.round - claimed : null;
+            return (
+              <div className="tableprompt">
+                <p className="veil-note">
+                  {claimed} of {state.round} tricks claimed so far
+                  {forbidden !== null && forbidden >= 0 && forbidden <= state.round && (
+                    <>
+                      <br />
+                      you may not bid {forbidden} — someone has to miss
+                    </>
+                  )}
+                </p>
+                <div className="bidgrid">
+                  {Array.from({ length: state.round + 1 }, (_, b) => (
+                    <button
+                      key={b}
+                      className="bidgrid__btn"
+                      disabled={b === forbidden}
+                      onClick={() => onBid(b)}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()
         ) : (
           <div className="trick">
             {trick.length === 0 && !showRoundEnd && (

@@ -157,6 +157,36 @@ describe('bidding', () => {
     expect(state.turnIndex).toBe((first + 1) % 4);
   });
 
+  test('the last bidder may not make the bids sum to the round number', () => {
+    // round 3 state mid-bidding: two players already bid, dealer (seat 2) is last
+    const base = fixedState({
+      phase: 'bidding',
+      round: 3,
+      dealerIndex: 2,
+      bids: [1, 0, null],
+      turnIndex: 2,
+      currentTrick: [],
+    });
+    expect(() => placeBid(base, 2, 2)).toThrow(GameError); // 1+0+2 = 3 = round
+    const ok = placeBid(base, 2, 1); // total 2 ≠ 3
+    expect(ok.bids).toEqual([1, 0, 1]);
+    expect(ok.phase).toBe('playing');
+  });
+
+  test('non-final bidders are free to bid anything in range', () => {
+    const base = fixedState({
+      phase: 'bidding',
+      round: 3,
+      dealerIndex: 2,
+      bids: [null, null, null],
+      turnIndex: 0,
+      currentTrick: [],
+    });
+    // seat 0 bidding 3 is fine even though it alone reaches the round total
+    const after = placeBid(base, 0, 3);
+    expect(after.bids[0]).toBe(3);
+  });
+
   test('after the last bid, play starts left of the dealer', () => {
     let state = createGame(4, seededRng(3));
     if (state.phase === 'choosingTrump') state = chooseTrump(state, state.dealerIndex, 'green');

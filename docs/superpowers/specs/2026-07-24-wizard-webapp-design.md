@@ -20,7 +20,9 @@ with friends. Self-hosted as a single Docker container on the user's Portainer i
   - Wizard → the **dealer chooses** the trump suit before bidding.
   - Final round (no cards left) → no trump.
 - **Bidding**: starting left of the dealer, each player predicts how many tricks they
-  will win (0..r). No restriction on the bid total (standard rules).
+  will win (0..r). The last bidder (the dealer) may not choose a number that makes
+  the bids sum to exactly r, so every round has at least one loser (variant rule,
+  requested 2026-07-24).
 - **Trick play**: player left of the dealer leads the first trick; the winner of a trick
   leads the next.
   - Wizards and Jesters may always be played.

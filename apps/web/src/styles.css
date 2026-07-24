@@ -793,6 +793,14 @@ button {
 
 .bidgrid__btn:active { transform: scale(0.94); background: #d9ab5a22; }
 
+.bidgrid__btn:disabled {
+  opacity: 0.28;
+  border-color: #ffffff1f;
+  color: var(--text-dim);
+  text-decoration: line-through;
+  cursor: default;
+}
+
 /* trump picker */
 
 .trumppick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

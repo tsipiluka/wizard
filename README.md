@@ -84,4 +84,6 @@ Each round deals one more card than the last (3 players → 20 rounds, 4 → 15,
 5 → 12, 6 → 10). After the deal, the next card sets trump — a Jester means no
 trump, a Wizard lets the dealer pick, and the final round has none. Everyone
 predicts their exact number of tricks; Wizards always win a trick, Jesters never
-do. Hit your bid for `20 + 10 × tricks`, miss it for `−10` per trick of error.
+do. The last bidder may not make the bids add up to the round's trick count, so
+someone always misses. Hit your bid for `20 + 10 × tricks`, miss it for `−10`
+per trick of error.
