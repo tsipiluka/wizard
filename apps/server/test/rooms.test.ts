@@ -195,6 +195,90 @@ describe('game play and redaction', () => {
   });
 });
 
+describe('admin stats', () => {
+  /** Play the current round to completion: trump (if needed), all-zero bids, first legal card each turn. */
+  function playRound(rooms: RoomManager, code: string, tokens: string[]): void {
+    let snap = rooms.clientState(code, tokens[0]!);
+    if (snap.phase === 'choosingTrump') rooms.chooseTrump(code, tokens[snap.dealerIndex]!, 'red');
+    while (rooms.clientState(code, tokens[0]!).phase === 'bidding') {
+      const turn = rooms.clientState(code, tokens[0]!).turnIndex;
+      rooms.bid(code, tokens[turn]!, 0);
+    }
+    while (rooms.clientState(code, tokens[0]!).phase === 'playing') {
+      const s = rooms.clientState(code, tokens[0]!);
+      const turnSnap = rooms.clientState(code, tokens[s.turnIndex]!);
+      rooms.play(code, tokens[s.turnIndex]!, turnSnap.legalIds[0]!);
+    }
+  }
+
+  test('an empty manager reports zero of everything', () => {
+    const rooms = new RoomManager(seededRng(9));
+    expect(rooms.stats()).toMatchObject({
+      activeRooms: 0,
+      lobbies: 0,
+      activeGames: 0,
+      finishedGames: 0,
+      connectedPlayers: 0,
+      totalPlayers: 0,
+      completedGames: 0,
+      rooms: [],
+    });
+  });
+
+  test('counts a lobby, then a started game, correctly', () => {
+    const rooms = new RoomManager(seededRng(9));
+    const { code, tokens } = threePlayerRoom(rooms);
+    expect(rooms.stats()).toMatchObject({
+      activeRooms: 1,
+      lobbies: 1,
+      activeGames: 0,
+      totalPlayers: 3,
+      connectedPlayers: 3,
+    });
+
+    rooms.start(code, tokens[0]!);
+    const stats = rooms.stats();
+    expect(stats).toMatchObject({ lobbies: 0, activeGames: 1, finishedGames: 0 });
+    expect(stats.rooms).toHaveLength(1);
+    expect(stats.rooms[0]).toMatchObject({
+      code,
+      playerCount: 3,
+      connectedCount: 3,
+      round: 1,
+      totalRounds: 20,
+    });
+  });
+
+  test('a disconnected player lowers connectedPlayers but not totalPlayers', () => {
+    const rooms = new RoomManager(seededRng(9));
+    const { code, tokens } = threePlayerRoom(rooms);
+    rooms.setConnected(code, tokens[1]!, false);
+    const stats = rooms.stats();
+    expect(stats.connectedPlayers).toBe(2);
+    expect(stats.totalPlayers).toBe(3);
+  });
+
+  test('completedGames increments exactly once when a game reaches gameOver, and resets are not persisted', () => {
+    const rooms = new RoomManager(seededRng(10));
+    const { code, tokens } = threePlayerRoom(rooms);
+    rooms.start(code, tokens[0]!);
+    expect(rooms.stats().completedGames).toBe(0);
+
+    for (let round = 1; round <= 20; round++) {
+      playRound(rooms, code, tokens);
+      if (round < 20) rooms.advance(code);
+    }
+
+    const stats = rooms.stats();
+    expect(stats.completedGames).toBe(1);
+    expect(stats.activeGames).toBe(0);
+    expect(stats.finishedGames).toBe(1);
+
+    // a fresh manager (simulating a restart) starts back at zero
+    expect(new RoomManager(seededRng(1)).stats().completedGames).toBe(0);
+  });
+});
+
 describe('moving a seat to another device', () => {
   test('a claim code hands the seat over and rotates the token', () => {
     const rooms = new RoomManager(seededRng(5));

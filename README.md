@@ -16,6 +16,7 @@ Self-hosted, no accounts and no database — create a table, share the link, pla
   rotates your session token and signs the old device out.
 - Table emotes with a per-player cooldown and per-player mute.
 - Dark "grimoire" design with hand-drawn card sigils, optimized for phones.
+- Optional read-only admin dashboard (active tables, players, games completed).
 
 ## Project layout
 
@@ -68,6 +69,24 @@ Put it behind your reverse proxy (Traefik/NPM/Caddy) with WebSocket support enab
 
 Rooms live in memory: a container restart ends running games (players' browsers
 return to the home screen). Idle rooms are cleaned up after 2 hours.
+
+## Admin dashboard
+
+A read-only page at `/admin` shows active tables, connected players, and how
+many games have been completed since the server started (all in-memory —
+resets on restart, same as everything else). It's disabled by default; set the
+`ADMIN_TOKEN` environment variable to turn it on:
+
+```bash
+openssl rand -hex 32   # generate a token
+```
+
+Put the result in your stack's `ADMIN_TOKEN` (in Portainer: the stack's
+*Environment variables*, or edit the `environment:` line in
+`docker-compose.yml` — don't commit a real token to git). Open `/admin`, paste
+the token in once; it's remembered in that browser via `localStorage`. There
+are no other admin actions (no way to close a table or kick a player from
+here) — it only reads `RoomManager.stats()`.
 
 ## Development
 

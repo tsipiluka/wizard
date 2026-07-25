@@ -7,6 +7,7 @@ import {
   type GameState,
   MAX_PLAYERS,
   MIN_PLAYERS,
+  type Phase,
   type Suit,
   advanceRound,
   chooseTrump,
@@ -34,6 +35,7 @@ interface Room {
   players: Player[];
   game: GameState | null;
   lastActivity: number;
+  createdAt: number;
 }
 
 /** An outstanding offer to move one seat to another device. */
@@ -43,6 +45,29 @@ interface Claim {
   expiresAt: number;
 }
 
+/** One row of the admin dashboard's room table. */
+export interface RoomSummary {
+  code: string;
+  phase: 'lobby' | Phase;
+  playerCount: number;
+  connectedCount: number;
+  round: number | null;
+  totalRounds: number | null;
+  createdAt: number;
+}
+
+/** Read-only operational snapshot for the admin dashboard. In-memory only: resets on restart. */
+export interface AdminStats {
+  activeRooms: number;
+  lobbies: number;
+  activeGames: number;
+  finishedGames: number;
+  connectedPlayers: number;
+  totalPlayers: number;
+  completedGames: number;
+  rooms: RoomSummary[];
+}
+
 /**
  * Owns all rooms and applies every game intent through the shared engine.
  * Pure of any transport concern; the socket layer only translates events.
@@ -50,6 +75,8 @@ interface Claim {
 export class RoomManager {
   private rooms = new Map<string, Room>();
   private claims = new Map<string, Claim>();
+  /** Lifetime count of games that reached gameOver. Resets on restart, like everything else here. */
+  private completedGames = 0;
 
   constructor(private rng: () => number = Math.random) {}
 
@@ -61,11 +88,13 @@ export class RoomManager {
       ).join('');
     } while (this.rooms.has(code));
     const token = randomBytes(16).toString('hex');
+    const now = Date.now();
     this.rooms.set(code, {
       code,
       players: [{ name: sanitizeName(name), token, connected: true, lastEmoteAt: 0 }],
       game: null,
-      lastActivity: Date.now(),
+      lastActivity: now,
+      createdAt: now,
     });
     return { code, token };
   }
@@ -135,7 +164,10 @@ export class RoomManager {
   }
 
   play(code: string, token: string, cardId: string): void {
+    const room = this.room(code);
+    const wasOver = room.game?.phase === 'gameOver';
     this.applyIntent(code, token, (game, seat) => playCard(game, seat, cardId));
+    if (!wasOver && room.game?.phase === 'gameOver') this.completedGames++;
   }
 
   /** Move a finished round into the next one. Idempotent-safe to skip if not at roundEnd. */
@@ -269,6 +301,47 @@ export class RoomManager {
 
   has(code: string): boolean {
     return this.rooms.has(code);
+  }
+
+  /** Read-only snapshot for the admin dashboard. */
+  stats(): AdminStats {
+    let lobbies = 0;
+    let activeGames = 0;
+    let finishedGames = 0;
+    let connectedPlayers = 0;
+    let totalPlayers = 0;
+    const rooms: RoomSummary[] = [];
+
+    for (const room of this.rooms.values()) {
+      const connectedCount = room.players.filter((p) => p.connected).length;
+      totalPlayers += room.players.length;
+      connectedPlayers += connectedCount;
+      if (!room.game) lobbies++;
+      else if (room.game.phase === 'gameOver') finishedGames++;
+      else activeGames++;
+
+      rooms.push({
+        code: room.code,
+        phase: room.game?.phase ?? 'lobby',
+        playerCount: room.players.length,
+        connectedCount,
+        round: room.game?.round ?? null,
+        totalRounds: room.game?.totalRounds ?? null,
+        createdAt: room.createdAt,
+      });
+    }
+    rooms.sort((a, b) => b.createdAt - a.createdAt);
+
+    return {
+      activeRooms: this.rooms.size,
+      lobbies,
+      activeGames,
+      finishedGames,
+      connectedPlayers,
+      totalPlayers,
+      completedGames: this.completedGames,
+      rooms,
+    };
   }
 
   /** Drop rooms with no activity for ROOM_TTL_MS, plus any orphaned/expired claims. */

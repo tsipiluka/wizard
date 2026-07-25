@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Server } from 'socket.io';
 import { GameError } from '@wizard/shared';
 import type { ErrorReply, ServerToClientEvents, Suit } from '@wizard/shared';
+import { registerAdmin } from './admin';
 import { RoomManager } from './rooms';
 
 const ROUND_END_DELAY_MS = 7000;
@@ -22,6 +23,9 @@ export async function buildServer(): Promise<BuiltServer> {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
 
   app.get('/healthz', async () => ({ ok: true }));
+
+  const rooms = new RoomManager();
+  registerAdmin(app, rooms, Date.now());
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const webDist = [
@@ -43,7 +47,6 @@ export async function buildServer(): Promise<BuiltServer> {
     app.log.warn('No web dist found; serving API only');
   }
 
-  const rooms = new RoomManager();
   const sweeper = setInterval(() => rooms.sweep(), 10 * 60 * 1000);
   sweeper.unref();
 
