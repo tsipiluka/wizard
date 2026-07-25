@@ -232,8 +232,9 @@ button {
 .home__title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(3rem, 16vw, 4.2rem);
-  letter-spacing: 0.14em;
+  /* sized for a 9-letter title (a 6-letter name would have more room to spare) */
+  font-size: clamp(2.1rem, 11vw, 3.4rem);
+  letter-spacing: 0.08em;
   background: linear-gradient(178deg, var(--gold-bright) 20%, var(--gold) 55%, #9a7136);
   -webkit-background-clip: text;
   background-clip: text;

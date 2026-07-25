@@ -18,7 +18,7 @@ export function Lobby({
   async function share() {
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Wizard', text: 'Join my Wizard table', url: shareUrl });
+        await navigator.share({ title: 'Tsipizard', text: 'Join my Tsipizard table', url: shareUrl });
         return;
       }
     } catch {

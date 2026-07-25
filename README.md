@@ -1,7 +1,8 @@
-# 🔮 Wizard — trick-taking by candlelight
+# 🔮 Tsipizard — trick-taking by candlelight
 
-Play the card game **Wizard** (Ken Fisher) online with 3–6 friends. Mobile-first,
-self-hosted, no accounts and no database — create a table, share the link, play.
+Tsipizard is a mobile-first way to play the classic trick-taking card game
+**Wizard** (designed by Ken Fisher, published by Amigo) online with 3–6 friends.
+Self-hosted, no accounts and no database — create a table, share the link, play.
 
 ## Features
 

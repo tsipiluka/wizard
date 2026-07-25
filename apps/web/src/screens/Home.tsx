@@ -22,7 +22,7 @@ export function Home({
         <div className="home__sigil" aria-hidden>
           ✦
         </div>
-        <h1 className="home__title">Wizard</h1>
+        <h1 className="home__title">Tsipizard</h1>
         <p className="home__sub">trick-taking by candlelight</p>
       </header>
 
