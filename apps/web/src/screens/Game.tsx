@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ClientState, Suit, TrickPlay } from '@wizard/shared';
+import { EMOTES, type ClientState, type EmoteId, type Suit, type TrickPlay } from '@wizard/shared';
 import { PlayingCard, SUIT_ICONS, sortHand } from '../cards';
+import { EMOTE_BUTTON_ICON, EMOTE_ICONS } from '../emoteIcons';
+import type { LiveEmote } from '../App';
+import { MoveDeviceSheet } from './MoveDevice';
 
 const SUIT_NAMES: Record<Suit, string> = {
   red: 'Embers',
@@ -11,6 +14,10 @@ const SUIT_NAMES: Record<Suit, string> = {
 
 export function Game({
   state,
+  emotes,
+  muted,
+  onToggleMute,
+  onEmote,
   onBid,
   onPlay,
   onChooseTrump,
@@ -18,6 +25,10 @@ export function Game({
   onExit,
 }: {
   state: ClientState;
+  emotes: LiveEmote[];
+  muted: number[];
+  onToggleMute: (seat: number) => void;
+  onEmote: (id: EmoteId) => void;
   onBid: (bid: number) => void;
   onPlay: (cardId: string) => void;
   onChooseTrump: (suit: Suit) => void;
@@ -29,6 +40,10 @@ export function Game({
   const me = players[seat]!;
   const myTurn = state.turnIndex === seat;
   const [showScores, setShowScores] = useState(false);
+  const [showEmotes, setShowEmotes] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+  const emoteFor = (s: number) => emotes.find((e) => e.seat === s);
 
   // When a trick completes the server clears currentTrick immediately;
   // keep showing the finished trick briefly so players see who took it.
@@ -87,14 +102,24 @@ export function Game({
             {state.round}<em>/{state.totalRounds}</em>
           </span>
         </div>
-        <button className="btn btn--ghost btn--small" onClick={() => setShowScores(true)}>
-          Scores
-        </button>
+        <div className="game__topbtns">
+          <button className="btn btn--ghost btn--small" onClick={() => setShowScores(true)}>
+            Scores
+          </button>
+          <button
+            className="btn btn--ghost btn--small game__menubtn"
+            onClick={() => setShowMenu(true)}
+            aria-label="Table menu"
+          >
+            ⋯
+          </button>
+        </div>
       </header>
 
       <section className="game__opponents">
         {opponents.map((i) => {
           const p = players[i]!;
+          const bubble = emoteFor(i);
           return (
             <div
               key={i}
@@ -104,6 +129,7 @@ export function Game({
                 p.connected ? '' : 'seatchip--away',
               ].join(' ')}
             >
+              {bubble && <EmoteBubble key={bubble.key} id={bubble.id} />}
               <span className="seatchip__name">
                 {p.name}
                 {state.dealerIndex === i && <span className="seatchip__dealer" title="Dealer">✦</span>}
@@ -193,7 +219,18 @@ export function Game({
       </section>
 
       <footer className="game__me">
+        <button
+          className="emotebtn"
+          onClick={() => setShowEmotes(true)}
+          aria-label="Send an emote"
+        >
+          {EMOTE_BUTTON_ICON}
+        </button>
         <div className={`game__mebar ${myTurn && !heldTrick ? 'game__mebar--turn' : ''}`}>
+          {(() => {
+            const mine = emoteFor(seat);
+            return mine ? <EmoteBubble key={mine.key} id={mine.id} own /> : null;
+          })()}
           <span className="game__mename">
             {me.name}
             {state.dealerIndex === seat && <span className="seatchip__dealer"> ✦</span>}
@@ -242,7 +279,74 @@ export function Game({
       )}
 
       {showScores && <ScoreSheet state={state} onClose={() => setShowScores(false)} />}
+
+      {showEmotes && (
+        <Sheet title="Say something" onClose={() => setShowEmotes(false)}>
+          <div className="emotegrid">
+            {EMOTES.map((e) => (
+              <button
+                key={e.id}
+                className="emotegrid__btn"
+                onClick={() => {
+                  onEmote(e.id);
+                  setShowEmotes(false);
+                }}
+              >
+                <span className="emotegrid__icon">{EMOTE_ICONS[e.id]}</span>
+                {e.label}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
+      {showMenu && (
+        <Sheet title="This table" onClose={() => setShowMenu(false)}>
+          <button
+            className="btn btn--gold"
+            onClick={() => {
+              setShowMenu(false);
+              setShowMove(true);
+            }}
+          >
+            Move to another device
+          </button>
+
+          <h3 className="panel__title menu__sub">Mute emotes from</h3>
+          <ul className="mutelist">
+            {players.map((p, i) =>
+              i === seat ? null : (
+                <li key={i} className="mutelist__row">
+                  <span className="mutelist__name">{p.name}</span>
+                  <button
+                    className={`mutetoggle ${muted.includes(i) ? 'mutetoggle--on' : ''}`}
+                    onClick={() => onToggleMute(i)}
+                  >
+                    {muted.includes(i) ? 'muted' : 'audible'}
+                  </button>
+                </li>
+              ),
+            )}
+          </ul>
+
+          <button className="btn btn--ghost" onClick={onExit}>
+            Leave this device
+          </button>
+        </Sheet>
+      )}
+
+      {showMove && <MoveDeviceSheet code={state.code} onClose={() => setShowMove(false)} />}
     </main>
+  );
+}
+
+function EmoteBubble({ id, own = false }: { id: EmoteId; own?: boolean }) {
+  const label = EMOTES.find((e) => e.id === id)?.label ?? '';
+  return (
+    <span className={`bubble ${own ? 'bubble--own' : ''}`} role="status">
+      <span className="bubble__icon">{EMOTE_ICONS[id]}</span>
+      <span className="bubble__label">{label}</span>
+    </span>
   );
 }
 

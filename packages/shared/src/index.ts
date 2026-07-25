@@ -1,3 +1,4 @@
+export * from './emotes';
 export * from './protocol';
 
 export type Suit = 'red' | 'yellow' | 'green' | 'blue';

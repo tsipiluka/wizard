@@ -390,6 +390,7 @@ button {
 /* ── game frame ── */
 
 .game {
+  position: relative;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -481,8 +482,11 @@ button {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 12px 2px 4px;
+  /* the bottom padding is room for emote bubbles: a horizontal scroller clips
+     both axes, so a bubble hanging below a chip must stay inside this box */
+  padding: 12px 2px 42px;
   scrollbar-width: none;
+  align-items: flex-start;
 }
 
 .game__opponents::-webkit-scrollbar { display: none; }
@@ -902,6 +906,224 @@ button {
   border-top: 1px solid var(--gold-dim);
   border-bottom: none;
 }
+
+/* ── emotes ── */
+
+.game__topbtns { display: flex; gap: 7px; align-items: center; }
+
+.game__menubtn {
+  padding: 7px 12px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.emotebtn {
+  position: absolute;
+  right: 12px;
+  /* clears the hand, the player bar and its separator, with breathing room */
+  bottom: calc(208px + env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+  background: linear-gradient(165deg, var(--ink-2), var(--ink-1));
+  border: 1px solid var(--gold-dim);
+  box-shadow: 0 6px 20px #00000073, inset 0 1px 0 #ffffff12;
+  z-index: 20;
+  transition: transform 0.12s ease, box-shadow 0.2s;
+}
+
+.emotebtn svg { width: 22px; height: 22px; }
+.emotebtn:active { transform: scale(0.92); box-shadow: 0 0 16px #d9ab5a4d; }
+
+.emotegrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.emotegrid__btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 12px;
+  border-radius: 12px;
+  border: 1px solid #ffffff1f;
+  background: var(--ink-1);
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: left;
+  transition: transform 0.1s, border-color 0.2s, background 0.2s;
+}
+
+.emotegrid__btn:active {
+  transform: scale(0.96);
+  border-color: var(--gold-dim);
+  background: #d9ab5a14;
+}
+
+.emotegrid__icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+}
+
+.emotegrid__icon svg { width: 100%; height: 100%; }
+
+/* floating speech bubble over a seat */
+
+.bubble {
+  position: absolute;
+  left: 50%;
+  /* hangs below the player it came from */
+  top: calc(100% + 7px);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 6px 11px;
+  border-radius: 99px;
+  background: linear-gradient(165deg, #efe4c6, var(--parchment-dark));
+  color: var(--ink-1);
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: 0 6px 18px #00000080, inset 0 0 0 1.5px #ffffffcc;
+  animation: bubble-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  z-index: 30;
+  pointer-events: none;
+}
+
+.bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: #efe4c6;
+}
+
+/*
+ * Your own bar sits directly on top of your hand, so your bubble rises into
+ * the open table instead — otherwise it would cover the cards you're about to play.
+ */
+.bubble--own {
+  top: auto;
+  bottom: calc(100% + 7px);
+}
+
+.bubble--own::after {
+  bottom: auto;
+  top: 100%;
+  border-bottom-color: transparent;
+  border-top-color: var(--parchment-dark);
+}
+
+@keyframes bubble-pop-own {
+  from { opacity: 0; transform: translate(-50%, -6px) scale(0.8); }
+}
+
+.bubble--own { animation-name: bubble-pop-own; }
+
+.bubble__icon { width: 16px; height: 16px; display: grid; place-items: center; }
+.bubble__icon svg { width: 100%; height: 100%; }
+
+@keyframes bubble-pop {
+  from { opacity: 0; transform: translate(-50%, 6px) scale(0.8); }
+}
+
+.seatchip, .game__mebar { position: relative; }
+
+/* ── table menu ── */
+
+.menu__sub { margin-top: 6px; margin-bottom: 0; }
+
+.mutelist { list-style: none; display: flex; flex-direction: column; }
+
+.mutelist__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid #ffffff0d;
+}
+
+.mutelist__name { flex: 1; }
+
+.mutetoggle {
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid #ffffff1f;
+  border-radius: 99px;
+  padding: 4px 12px;
+}
+
+.mutetoggle--on { color: var(--bad); border-color: #e07a6f59; }
+
+/* ── move to another device ── */
+
+.moveqr {
+  align-self: center;
+  width: min(58vw, 210px);
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--parchment);
+  box-shadow: 0 8px 26px #00000073;
+  transition: opacity 0.3s, filter 0.3s;
+}
+
+.moveqr svg { width: 100%; height: auto; display: block; }
+.moveqr--dead { opacity: 0.3; filter: grayscale(1); }
+
+.moveclaim { display: flex; gap: 6px; justify-content: center; }
+
+.moveclaim__glyph {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--gold-bright);
+  background: var(--ink-1);
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  width: 40px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+}
+
+.moveclaim--dead .moveclaim__glyph {
+  color: var(--text-dim);
+  border-color: #ffffff1f;
+  text-decoration: line-through;
+}
+
+.movewarn { font-size: 0.8rem; opacity: 0.75; }
+
+/* ── home: move-here fallback ── */
+
+.home__link {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 0.86rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  align-self: center;
+  padding: 4px;
+}
+
+.home__link:hover { color: var(--gold); }
+
+.home__move { display: flex; flex-direction: column; gap: 14px; }
+
+.field__input--claim { letter-spacing: 0.35em; font-size: 1.25rem; }
 
 /* wider screens: cap the game like a table felt */
 @media (min-width: 700px) {

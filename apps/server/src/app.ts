@@ -73,6 +73,19 @@ export async function buildServer(): Promise<BuiltServer> {
     }
   }
 
+  /** Evict every socket still holding a superseded seat token. */
+  async function kickToken(code: string, token: string): Promise<void> {
+    const sockets = await io.in(code).fetchSockets();
+    for (const other of sockets) {
+      const otherData = other.data as { token?: string };
+      if (otherData.token !== token) continue;
+      other.emit('kicked' satisfies keyof ServerToClientEvents, 'moved');
+      // leaving stops the broadcasts; the stale token itself is already inert,
+      // since the room manager no longer recognizes it
+      void other.leave(code);
+    }
+  }
+
   function scheduleAdvance(code: string): void {
     clearTimeout(roundTimers.get(code));
     roundTimers.set(
@@ -202,11 +215,50 @@ export async function buildServer(): Promise<BuiltServer> {
       )(...args);
     });
 
+    socket.on(
+      'game:emote',
+      safe((payload, cb) => {
+        if (!data.code || !data.token) throw new GameError('no_room', 'You are not in a room');
+        const sent = rooms.emote(data.code, data.token, String(payload.id));
+        cb({ ok: true });
+        // an event, not state: no snapshot rebroadcast
+        io.to(data.code).emit('emote', { ...sent, at: Date.now() });
+      }),
+    );
+
+    socket.on(
+      'seat:claimCode',
+      safe((_payload, cb) => {
+        if (!data.code || !data.token) throw new GameError('no_room', 'You are not in a room');
+        const { code, expiresAt } = rooms.createClaim(data.code, data.token);
+        cb({ ok: true, claim: code, expiresAt });
+      }),
+    );
+
+    socket.on(
+      'seat:claim',
+      safe((payload, cb) => {
+        const { roomCode, token, previousToken } = rooms.redeemClaim(String(payload.claim ?? ''));
+        // evict whoever held the seat before, then take it over here
+        void kickToken(roomCode, previousToken);
+        enter(roomCode, token);
+        cb({ ok: true, code: roomCode, token });
+      }),
+    );
+
     socket.on('disconnect', () => {
-      if (data.code && data.token) {
-        rooms.setConnected(data.code, data.token, false);
-        void broadcast(data.code);
-      }
+      const { code, token } = data;
+      if (!code || !token) return;
+      void (async () => {
+        // A reconnect can race ahead of the old socket's disconnect. Only mark the
+        // seat away when no other live socket still holds this token.
+        const others = await io.in(code).fetchSockets();
+        const stillHere = others.some(
+          (s) => s.id !== socket.id && (s.data as { token?: string }).token === token,
+        );
+        if (!stillHere) rooms.setConnected(code, token, false);
+        await broadcast(code);
+      })();
     });
   });
 

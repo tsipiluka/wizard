@@ -1,3 +1,4 @@
+import type { EmoteId } from './emotes';
 import type { Card, Phase, RoundScore, Suit, TrickPlay } from './index';
 
 /** What every player may know about any player. */
@@ -51,9 +52,19 @@ export interface ClientToServerEvents {
   'game:chooseTrump': (payload: { suit: Suit }, cb: (r: Reply<object>) => void) => void;
   'game:bid': (payload: { bid: number }, cb: (r: Reply<object>) => void) => void;
   'game:play': (payload: { cardId: string }, cb: (r: Reply<object>) => void) => void;
+  'game:emote': (payload: { id: EmoteId }, cb: (r: Reply<object>) => void) => void;
+  /** Ask for a single-use code that moves this seat to another device. */
+  'seat:claimCode': (cb: (r: Reply<{ claim: string; expiresAt: number }>) => void) => void;
+  /** Redeem such a code on the new device. */
+  'seat:claim': (
+    payload: { claim: string },
+    cb: (r: Reply<{ code: string; token: string }>) => void,
+  ) => void;
 }
 
 export interface ServerToClientEvents {
   state: (state: ClientState) => void;
-  kicked: () => void;
+  /** This device lost the seat — another one claimed it. */
+  kicked: (reason: 'moved') => void;
+  emote: (payload: { seat: number; id: EmoteId; at: number }) => void;
 }

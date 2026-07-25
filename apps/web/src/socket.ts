@@ -2,6 +2,7 @@ import { io, type Socket } from 'socket.io-client';
 import type {
   ClientState,
   ClientToServerEvents,
+  EmoteId,
   Reply,
   ServerToClientEvents,
   Suit,
@@ -58,6 +59,11 @@ export const api = {
   chooseTrump: (suit: Suit) => ask((cb) => socket.emit('game:chooseTrump', { suit }, cb)),
   bid: (bid: number) => ask((cb) => socket.emit('game:bid', { bid }, cb)),
   play: (cardId: string) => ask((cb) => socket.emit('game:play', { cardId }, cb)),
+  emote: (id: EmoteId) => ask((cb) => socket.emit('game:emote', { id }, cb)),
+  claimCode: () =>
+    ask<{ claim: string; expiresAt: number }>((cb) => socket.emit('seat:claimCode', cb)),
+  claimSeat: (claim: string) =>
+    ask<{ code: string; token: string }>((cb) => socket.emit('seat:claim', { claim }, cb)),
 };
 
 export type { ClientState };

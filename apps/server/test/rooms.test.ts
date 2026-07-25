@@ -167,10 +167,90 @@ describe('game play and redaction', () => {
     expect(next.hand).toHaveLength(2);
   });
 
+  test('emotes are broadcast-ready and rate limited per player', () => {
+    const rooms = new RoomManager(seededRng(4));
+    const { code, tokens } = threePlayerRoom(rooms);
+    const t0 = 1_000_000;
+
+    expect(rooms.emote(code, tokens[0]!, 'well-played', t0)).toEqual({ seat: 0, id: 'well-played' });
+    // same player again immediately: rejected
+    expect(() => rooms.emote(code, tokens[0]!, 'oops', t0 + 100)).toThrow(/slow down|wait/i);
+    // a different player is unaffected by someone else's cooldown
+    expect(rooms.emote(code, tokens[1]!, 'oops', t0 + 100)).toEqual({ seat: 1, id: 'oops' });
+    // after the cooldown elapses the first player may emote again
+    expect(rooms.emote(code, tokens[0]!, 'oops', t0 + 5000)).toEqual({ seat: 0, id: 'oops' });
+  });
+
+  test('unknown emote ids are rejected', () => {
+    const rooms = new RoomManager(seededRng(4));
+    const { code, tokens } = threePlayerRoom(rooms);
+    expect(() => rooms.emote(code, tokens[0]!, 'not-an-emote', 1)).toThrow(/emote/i);
+  });
+
   test('idle rooms are garbage collected', () => {
     const rooms = new RoomManager(seededRng(3));
     const { code } = rooms.create('Ana');
     rooms.sweep(Date.now() + 3 * 60 * 60 * 1000); // 3h later
     expect(() => rooms.join(code, 'Bob')).toThrow(/room/i);
+  });
+});
+
+describe('moving a seat to another device', () => {
+  test('a claim code hands the seat over and rotates the token', () => {
+    const rooms = new RoomManager(seededRng(5));
+    const { code, tokens } = threePlayerRoom(rooms);
+    rooms.start(code, tokens[0]!);
+    const before = rooms.clientState(code, tokens[1]!);
+
+    const claim = rooms.createClaim(code, tokens[1]!, 1000);
+    expect(claim.code).toMatch(/^[A-Z0-9]{6}$/);
+    expect(claim.expiresAt).toBeGreaterThan(1000);
+
+    const redeemed = rooms.redeemClaim(claim.code, 2000);
+    expect(redeemed.roomCode).toBe(code);
+    expect(redeemed.token).not.toBe(tokens[1]!); // rotated
+    expect(redeemed.previousToken).toBe(tokens[1]!); // so the old socket can be kicked
+
+    // the new token owns the same seat, with the same hand
+    const after = rooms.clientState(code, redeemed.token);
+    expect(after.seat).toBe(1);
+    expect(after.hand).toEqual(before.hand);
+    expect(after.players[1]!.name).toBe('Bob');
+
+    // the old token is dead
+    expect(() => rooms.clientState(code, tokens[1]!)).toThrow(/token|player/i);
+  });
+
+  test('a claim code works only once', () => {
+    const rooms = new RoomManager(seededRng(5));
+    const { code, tokens } = threePlayerRoom(rooms);
+    const claim = rooms.createClaim(code, tokens[2]!, 1000);
+    rooms.redeemClaim(claim.code, 1500);
+    expect(() => rooms.redeemClaim(claim.code, 1600)).toThrow(/code/i);
+  });
+
+  test('expired and unknown claim codes are refused', () => {
+    const rooms = new RoomManager(seededRng(5));
+    const { code, tokens } = threePlayerRoom(rooms);
+    const claim = rooms.createClaim(code, tokens[0]!, 1000);
+    expect(() => rooms.redeemClaim(claim.code, claim.expiresAt + 1)).toThrow(/expired|code/i);
+    expect(() => rooms.redeemClaim('ZZZZZZ', 1200)).toThrow(/code/i);
+  });
+
+  test('issuing a new claim invalidates the previous one for that seat', () => {
+    const rooms = new RoomManager(seededRng(5));
+    const { code, tokens } = threePlayerRoom(rooms);
+    const first = rooms.createClaim(code, tokens[0]!, 1000);
+    const second = rooms.createClaim(code, tokens[0]!, 1100);
+    expect(() => rooms.redeemClaim(first.code, 1200)).toThrow(/code/i);
+    expect(rooms.redeemClaim(second.code, 1200).roomCode).toBe(code);
+  });
+
+  test('claims of a garbage-collected room cannot be redeemed', () => {
+    const rooms = new RoomManager(seededRng(5));
+    const { code, tokens } = threePlayerRoom(rooms);
+    const claim = rooms.createClaim(code, tokens[0]!, 1000);
+    rooms.sweep(Date.now() + 3 * 60 * 60 * 1000);
+    expect(() => rooms.redeemClaim(claim.code, 1200)).toThrow(/code|room/i);
   });
 });

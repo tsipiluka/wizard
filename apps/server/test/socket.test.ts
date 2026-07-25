@@ -82,4 +82,87 @@ describe('socket layer resilience', () => {
     expect(state.phase).toBe('lobby');
     expect(state.players.map((p) => p.name)).toEqual(['Host', 'Guest']);
   });
+
+  test('an emote reaches everyone at the table, including the sender', async () => {
+    const host = connect();
+    const guest = connect();
+    const seen: { seat: number; id: string }[] = [];
+    const seenByHost: { seat: number; id: string }[] = [];
+    guest.on('emote', (e) => seen.push(e));
+    host.on('emote', (e) => seenByHost.push(e));
+
+    const created = await ask<{ ok: boolean; code: string }>(host, 'room:create', { name: 'Host' });
+    await ask(guest, 'room:join', { code: created.code, name: 'Guest' });
+
+    const sent = await ask<{ ok: boolean }>(guest, 'game:emote', { id: 'well-played' });
+    expect(sent.ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(seen).toEqual([expect.objectContaining({ seat: 1, id: 'well-played' })]);
+    expect(seenByHost).toEqual([expect.objectContaining({ seat: 1, id: 'well-played' })]);
+
+    // immediate repeat is rate limited, and bogus ids are refused
+    const spam = await ask<{ ok: boolean; code: string }>(guest, 'game:emote', { id: 'oops' });
+    expect(spam).toMatchObject({ ok: false, code: 'emote_cooldown' });
+    const bogus = await ask<{ ok: boolean; code: string }>(host, 'game:emote', { id: '<script>' });
+    expect(bogus).toMatchObject({ ok: false, code: 'unknown_emote' });
+  });
+
+  test('a lingering old socket disconnecting does not mark a reconnected player away', async () => {
+    const first = connect();
+    const watcher = connect();
+    const states: { players: { name: string; connected: boolean }[] }[] = [];
+    watcher.on('state', (s) => states.push(s));
+
+    const created = await ask<{ ok: boolean; code: string; token: string }>(first, 'room:create', {
+      name: 'Ana',
+    });
+    await ask(watcher, 'room:join', { code: created.code, name: 'Watcher' });
+
+    // the phone reconnects on a new socket before the server notices the old one
+    const second = connect();
+    await ask(second, 'room:join', { code: created.code, token: created.token });
+
+    first.disconnect();
+    await new Promise((r) => setTimeout(r, 300));
+
+    const latest = states[states.length - 1]!;
+    expect(latest.players[0]!.name).toBe('Ana');
+    expect(latest.players[0]!.connected).toBe(true);
+  });
+
+  test('a claim code moves the seat and kicks the old device', async () => {
+    const phone = connect();
+    const other = connect();
+    const tablet = connect();
+    // the claim itself triggers the state broadcast, so listen before redeeming
+    const tabletStates: { seat: number; players: { name: string }[] }[] = [];
+    tablet.on('state', (s) => tabletStates.push(s));
+
+    const created = await ask<{ ok: boolean; code: string }>(phone, 'room:create', { name: 'Ana' });
+    await ask(other, 'room:join', { code: created.code, name: 'Bob' });
+
+    const kicked = new Promise<string>((resolve) => phone.once('kicked', resolve));
+    const claim = await ask<{ ok: boolean; claim: string }>(phone, 'seat:claimCode');
+    expect(claim.claim).toMatch(/^[A-Z0-9]{6}$/);
+
+    const moved = await ask<{ ok: boolean; code: string; token: string }>(tablet, 'seat:claim', {
+      claim: claim.claim,
+    });
+    expect(moved.ok).toBe(true);
+    expect(moved.code).toBe(created.code);
+    expect(await kicked).toBe('moved');
+
+    // the tablet now holds the seat and receives state
+    await new Promise((r) => setTimeout(r, 150));
+    expect(tabletStates.length).toBeGreaterThan(0);
+    const state = tabletStates[tabletStates.length - 1]!;
+    expect(state.seat).toBe(0);
+    expect(state.players[0]!.name).toBe('Ana');
+
+    // and the code cannot be reused
+    const replay = await ask<{ ok: boolean; code: string }>(other, 'seat:claim', {
+      claim: claim.claim,
+    });
+    expect(replay).toMatchObject({ ok: false, code: 'bad_claim' });
+  });
 });

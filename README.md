@@ -11,6 +11,9 @@ self-hosted, no accounts and no database — create a table, share the link, pla
 - Rooms with 4-letter codes and share links; the game is fully server-authoritative
   (hands are never sent to other players).
 - Seamless reconnect: your seat survives page reloads, phone sleep, and network blips.
+- Move your seat between devices mid-game with a single-use QR/transfer code that
+  rotates your session token and signs the old device out.
+- Table emotes with a per-player cooldown and per-player mute.
 - Dark "grimoire" design with hand-drawn card sigils, optimized for phones.
 
 ## Project layout
