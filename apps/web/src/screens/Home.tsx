@@ -6,15 +6,15 @@ export function Home({
   onClaim,
 }: {
   prefillCode: string;
-  onEnter: (kind: 'create' | 'join', name: string, code?: string) => void;
+  onEnter: (kind: 'create' | 'join' | 'quick', name: string, code?: string) => void;
   onClaim: (claim: string) => void;
 }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState(prefillCode);
-  const [mode, setMode] = useState<'create' | 'join'>(prefillCode ? 'join' : 'create');
+  const [mode, setMode] = useState<'create' | 'join' | 'quick'>(prefillCode ? 'join' : 'create');
   const [moving, setMoving] = useState(false);
   const [claim, setClaim] = useState('');
-  const ready = name.trim().length > 0 && (mode === 'create' || code.trim().length === 4);
+  const ready = name.trim().length > 0 && (mode !== 'join' || code.trim().length === 4);
 
   return (
     <main className="home">
@@ -65,6 +65,15 @@ export function Home({
           >
             Join table
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'quick'}
+            className={`mode ${mode === 'quick' ? 'mode--on' : ''}`}
+            onClick={() => setMode('quick')}
+          >
+            Public table
+          </button>
         </div>
 
         {mode === 'join' && (
@@ -82,8 +91,15 @@ export function Home({
           </label>
         )}
 
+        {mode === 'quick' && (
+          <p className="home__hint">
+            Seated with whoever else is looking for a game — starts on its own once enough
+            people join.
+          </p>
+        )}
+
         <button className="btn btn--gold" type="submit" disabled={!ready}>
-          {mode === 'create' ? 'Light the candles' : 'Take a seat'}
+          {mode === 'create' ? 'Light the candles' : mode === 'join' ? 'Take a seat' : 'Find a table'}
         </button>
       </form>
 

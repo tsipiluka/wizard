@@ -49,6 +49,8 @@ function ask<T>(fn: (cb: (r: Reply<T>) => void) => void): Promise<T> {
 export const api = {
   create: (name: string) =>
     ask<{ code: string; token: string }>((cb) => socket.emit('room:create', { name }, cb)),
+  quickMatch: (name: string) =>
+    ask<{ code: string; token: string }>((cb) => socket.emit('room:quickMatch', { name }, cb)),
   join: (code: string, name: string) =>
     ask<{ token: string }>((cb) => socket.emit('room:join', { code, name }, cb)),
   rejoin: (code: string, token: string) =>

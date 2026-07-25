@@ -11,6 +11,8 @@ Self-hosted, no accounts and no database — create a table, share the link, pla
   (20 + 10·tricks, −10 per trick off).
 - Rooms with 4-letter codes and share links; the game is fully server-authoritative
   (hands are never sent to other players).
+- Public tables: no friends yet? "Public table" seats you with other strangers
+  looking for a game and starts on its own once there are enough players.
 - Seamless reconnect: your seat survives page reloads, phone sleep, and network blips.
 - Move your seat between devices mid-game with a single-use QR/transfer code that
   rotates your session token and signs the old device out.

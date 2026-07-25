@@ -107,7 +107,7 @@ const ADMIN_HTML = String.raw`<!doctype html>
     <div class="tiles" id="tiles"></div>
     <table>
       <thead>
-        <tr><th>Code</th><th>Phase</th><th>Round</th><th>Players</th><th>Age</th></tr>
+        <tr><th>Code</th><th>Phase</th><th>Kind</th><th>Round</th><th>Players</th><th>Age</th></tr>
       </thead>
       <tbody id="roomRows"></tbody>
     </table>
@@ -198,12 +198,13 @@ const ADMIN_HTML = String.raw`<!doctype html>
 
     const rows = document.getElementById('roomRows');
     if (s.rooms.length === 0) {
-      rows.innerHTML = '<tr><td colspan="5" class="empty">No tables right now.</td></tr>';
+      rows.innerHTML = '<tr><td colspan="6" class="empty">No tables right now.</td></tr>';
     } else {
       rows.innerHTML = s.rooms
         .map(
           (r) =>
             '<tr><td>' + r.code + '</td><td>' + phaseLabel(r.phase) + '</td><td>' +
+            (r.isPublic ? 'public' : 'private') + '</td><td>' +
             (r.round ? r.round + ' / ' + r.totalRounds : '—') + '</td><td>' +
             r.connectedCount + ' / ' + r.playerCount + '</td><td>' + ago(r.createdAt) + '</td></tr>',
         )

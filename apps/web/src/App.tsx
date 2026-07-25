@@ -103,10 +103,13 @@ export default function App() {
   }, [showToast]);
 
   const enterRoom = useCallback(
-    async (kind: 'create' | 'join', name: string, code?: string) => {
+    async (kind: 'create' | 'join' | 'quick', name: string, code?: string) => {
       try {
         if (kind === 'create') {
           const r = await api.create(name);
+          saveSession({ code: r.code, token: r.token, name });
+        } else if (kind === 'quick') {
+          const r = await api.quickMatch(name);
           saveSession({ code: r.code, token: r.token, name });
         } else {
           const clean = (code ?? '').trim().toUpperCase();

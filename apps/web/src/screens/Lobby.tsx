@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ClientState } from '@wizard/shared';
 
 export function Lobby({
@@ -14,6 +14,18 @@ export function Lobby({
   const isHost = state.players[state.seat]?.isHost ?? false;
   const canStart = state.players.length >= 3;
   const shareUrl = `${window.location.origin}/#/join/${state.code}`;
+
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (state.autoStartAt === null) {
+      setSecondsLeft(null);
+      return;
+    }
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((state.autoStartAt! - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [state.autoStartAt]);
 
   async function share() {
     try {
@@ -48,6 +60,14 @@ export function Lobby({
           {copied ? 'Link copied ✓' : 'Share invite'}
         </button>
       </header>
+
+      {state.isPublic && (
+        <p className="veil-note">
+          {secondsLeft !== null
+            ? `Public table — starting in ${secondsLeft}s`
+            : 'Public table — starts once 3 players are seated'}
+        </p>
+      )}
 
       <section className="panel lobby__seats">
         <h2 className="panel__title">Seated ({state.players.length}/6)</h2>

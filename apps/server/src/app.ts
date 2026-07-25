@@ -56,10 +56,13 @@ export async function buildServer(): Promise<BuiltServer> {
   });
   app.addHook('onClose', async () => {
     clearInterval(sweeper);
+    for (const timer of roundTimers.values()) clearTimeout(timer);
+    for (const timer of publicStartTimers.values()) clearTimeout(timer);
     await io.close();
   });
 
   const roundTimers = new Map<string, NodeJS.Timeout>();
+  const publicStartTimers = new Map<string, NodeJS.Timeout>();
 
   /** Push each connected socket in the room its own redacted snapshot. */
   async function broadcast(code: string): Promise<void> {
@@ -87,6 +90,28 @@ export async function buildServer(): Promise<BuiltServer> {
       // since the room manager no longer recognizes it
       void other.leave(code);
     }
+  }
+
+  /** (Re)arm the timer that fires a public lobby's auto-start, per its current deadline. */
+  function schedulePublicStart(code: string): void {
+    clearTimeout(publicStartTimers.get(code));
+    publicStartTimers.delete(code);
+    const at = rooms.publicAutoStartAt(code);
+    if (at === null) return;
+    publicStartTimers.set(
+      code,
+      setTimeout(
+        () => {
+          publicStartTimers.delete(code);
+          try {
+            if (rooms.startIfDue(code)) void broadcast(code);
+          } catch (err) {
+            app.log.error({ err, code }, 'failed to auto-start public table');
+          }
+        },
+        Math.max(0, at - Date.now()),
+      ),
+    );
   }
 
   function scheduleAdvance(code: string): void {
@@ -171,6 +196,16 @@ export async function buildServer(): Promise<BuiltServer> {
     );
 
     socket.on(
+      'room:quickMatch',
+      safe((payload, cb) => {
+        const { code, token } = rooms.quickMatch(String(payload.name ?? ''));
+        enter(code, token);
+        cb({ ok: true, code, token });
+        schedulePublicStart(code);
+      }),
+    );
+
+    socket.on(
       'room:join',
       safe((payload, cb) => {
         const code = String(payload.code ?? '').trim().toUpperCase();
@@ -179,6 +214,7 @@ export async function buildServer(): Promise<BuiltServer> {
         const result = rooms.join(code, name, token);
         enter(code, result.token);
         cb({ ok: true, token: result.token });
+        schedulePublicStart(code);
       }),
     );
 
@@ -193,6 +229,7 @@ export async function buildServer(): Promise<BuiltServer> {
         data.token = undefined;
         cb({ ok: true });
         void broadcast(left);
+        schedulePublicStart(left);
       }),
     );
 

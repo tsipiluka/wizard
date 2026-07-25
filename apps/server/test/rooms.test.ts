@@ -66,6 +66,74 @@ describe('lobby', () => {
   });
 });
 
+describe('public quick match', () => {
+  test('the first quick-matcher opens a new public table', () => {
+    const rooms = new RoomManager(seededRng(6));
+    const { code, token } = rooms.quickMatch('Ana');
+    const state = rooms.clientState(code, token);
+    expect(state.isPublic).toBe(true);
+    expect(state.players).toHaveLength(1);
+    expect(state.autoStartAt).toBeNull();
+  });
+
+  test('a second quick-matcher takes the open seat instead of opening another table', () => {
+    const rooms = new RoomManager(seededRng(6));
+    const first = rooms.quickMatch('Ana');
+    const second = rooms.quickMatch('Bob');
+    expect(second.code).toBe(first.code);
+    expect(rooms.clientState(first.code, first.token).players.map((p) => p.name)).toEqual([
+      'Ana',
+      'Bob',
+    ]);
+  });
+
+  test('a countdown starts once the table reaches the minimum, and is cleared by a departure', () => {
+    const rooms = new RoomManager(seededRng(6));
+    const a = rooms.quickMatch('Ana');
+    rooms.quickMatch('Bob');
+    expect(rooms.publicAutoStartAt(a.code)).toBeNull();
+    const c = rooms.quickMatch('Cy');
+    expect(rooms.publicAutoStartAt(a.code)).not.toBeNull();
+
+    rooms.leave(a.code, c.token);
+    expect(rooms.publicAutoStartAt(a.code)).toBeNull();
+  });
+
+  test('startIfDue starts the game once the deadline passes, and is a no-op before it', () => {
+    const rooms = new RoomManager(seededRng(6));
+    const a = rooms.quickMatch('Ana');
+    rooms.quickMatch('Bob');
+    rooms.quickMatch('Cy');
+    const at = rooms.publicAutoStartAt(a.code)!;
+
+    expect(rooms.startIfDue(a.code, at - 1)).toBe(false);
+    expect(rooms.clientState(a.code, a.token).phase).toBe('lobby');
+
+    expect(rooms.startIfDue(a.code, at)).toBe(true);
+    expect(rooms.clientState(a.code, a.token).phase).not.toBe('lobby');
+    // second call is a no-op: no autoStartAt left to fire
+    expect(rooms.startIfDue(a.code, at + 1000)).toBe(false);
+  });
+
+  test('a full public table is due to start immediately', () => {
+    const rooms = new RoomManager(seededRng(6));
+    const a = rooms.quickMatch('P0');
+    for (let i = 1; i < 6; i++) rooms.quickMatch(`P${i}`);
+    const at = rooms.publicAutoStartAt(a.code);
+    expect(at).not.toBeNull();
+    expect(rooms.startIfDue(a.code, at!)).toBe(true);
+  });
+
+  test('quick match never joins a private room created via create()/join()', () => {
+    const rooms = new RoomManager(seededRng(6));
+    rooms.create('Ana');
+    const { code } = rooms.quickMatch('Bob');
+    expect(code).not.toBe(undefined);
+    const stats = rooms.stats();
+    expect(stats.activeRooms).toBe(2);
+  });
+});
+
 describe('game play and redaction', () => {
   test('each player sees only their own hand; others are counts', () => {
     const rooms = new RoomManager(seededRng(2));

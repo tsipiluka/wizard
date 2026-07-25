@@ -17,6 +17,9 @@ export interface ClientState {
   code: string;
   phase: 'lobby' | Phase;
   seat: number;
+  isPublic: boolean;
+  /** When a public lobby will auto-start (null if not counting down). */
+  autoStartAt: number | null;
   players: PublicPlayer[];
   hand: Card[];
   /** Card ids you may legally play right now (empty unless it is your turn). */
@@ -42,6 +45,11 @@ export type Reply<T> = ({ ok: true } & T) | ErrorReply;
 
 export interface ClientToServerEvents {
   'room:create': (payload: { name: string }, cb: (r: Reply<{ code: string; token: string }>) => void) => void;
+  /** Join (or open) a public table with an open seat; no code needed. */
+  'room:quickMatch': (
+    payload: { name: string },
+    cb: (r: Reply<{ code: string; token: string }>) => void,
+  ) => void;
   'room:join': (
     payload: { code: string; name?: string; token?: string },
     cb: (r: Reply<{ token: string }>) => void,

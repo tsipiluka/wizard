@@ -22,6 +22,8 @@ const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 /** Long enough to walk to the other device, short enough that a stale photo is useless. */
 const CLAIM_TTL_MS = 3 * 60 * 1000;
 const CLAIM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no look-alikes (I/O/0/1)
+/** How long a public table waits for more players once it has enough to start. */
+const PUBLIC_AUTO_START_DELAY_MS = 20 * 1000;
 
 interface Player {
   name: string;
@@ -36,6 +38,9 @@ interface Room {
   game: GameState | null;
   lastActivity: number;
   createdAt: number;
+  /** Open to anyone via quickMatch(), and starts itself once it has enough players. */
+  isPublic: boolean;
+  autoStartAt: number | null;
 }
 
 /** An outstanding offer to move one seat to another device. */
@@ -49,6 +54,7 @@ interface Claim {
 export interface RoomSummary {
   code: string;
   phase: 'lobby' | Phase;
+  isPublic: boolean;
   playerCount: number;
   connectedCount: number;
   round: number | null;
@@ -95,7 +101,46 @@ export class RoomManager {
       game: null,
       lastActivity: now,
       createdAt: now,
+      isPublic: false,
+      autoStartAt: null,
     });
+    return { code, token };
+  }
+
+  /**
+   * Take an open seat at a public table, or open a new one. Anyone can find
+   * these without a code; they auto-start once enough strangers show up.
+   */
+  quickMatch(name: string): { code: string; token: string } {
+    const clean = sanitizeName(name);
+    for (const room of this.rooms.values()) {
+      if (room.isPublic && !room.game && room.players.length < MAX_PLAYERS) {
+        const token = randomBytes(16).toString('hex');
+        room.players.push({ name: clean, token, connected: true, lastEmoteAt: 0 });
+        room.lastActivity = Date.now();
+        this.recomputePublicAutoStart(room);
+        return { code: room.code, token };
+      }
+    }
+    let code: string;
+    do {
+      code = Array.from({ length: 4 }, () =>
+        String.fromCharCode(65 + Math.floor(this.rng() * 26)),
+      ).join('');
+    } while (this.rooms.has(code));
+    const token = randomBytes(16).toString('hex');
+    const now = Date.now();
+    const room: Room = {
+      code,
+      players: [{ name: clean, token, connected: true, lastEmoteAt: 0 }],
+      game: null,
+      lastActivity: now,
+      createdAt: now,
+      isPublic: true,
+      autoStartAt: null,
+    };
+    this.rooms.set(code, room);
+    this.recomputePublicAutoStart(room);
     return { code, token };
   }
 
@@ -121,6 +166,7 @@ export class RoomManager {
       lastEmoteAt: 0,
     });
     room.lastActivity = Date.now();
+    this.recomputePublicAutoStart(room);
     return { token: newToken };
   }
 
@@ -129,7 +175,10 @@ export class RoomManager {
     if (room.game) throw new GameError('already_started', 'You cannot leave a running game');
     room.players = room.players.filter((p) => p.token !== token);
     if (room.players.length === 0) this.rooms.delete(code);
-    else room.lastActivity = Date.now();
+    else {
+      room.lastActivity = Date.now();
+      this.recomputePublicAutoStart(room);
+    }
   }
 
   start(code: string, token: string): void {
@@ -262,6 +311,30 @@ export class RoomManager {
     }
   }
 
+  /**
+   * Current auto-start deadline for a public lobby (null if not counting down,
+   * or if the room isn't public/known). Used by the transport layer to time
+   * the actual start.
+   */
+  publicAutoStartAt(code: string): number | null {
+    return this.rooms.get(code)?.autoStartAt ?? null;
+  }
+
+  /** Start a public lobby if its countdown has elapsed. Returns whether it did. */
+  startIfDue(code: string, now: number = Date.now()): boolean {
+    const room = this.rooms.get(code);
+    if (!room || !room.isPublic || room.game || room.autoStartAt === null) return false;
+    if (now < room.autoStartAt) return false;
+    if (room.players.length < MIN_PLAYERS) {
+      room.autoStartAt = null;
+      return false;
+    }
+    room.game = createGame(room.players.length, this.rng);
+    room.autoStartAt = null;
+    room.lastActivity = now;
+    return true;
+  }
+
   /** Redacted per-player snapshot: the only view of a game that leaves the server. */
   clientState(code: string, token: string): ClientState {
     const room = this.room(code);
@@ -271,6 +344,8 @@ export class RoomManager {
       code: room.code,
       phase: game?.phase ?? 'lobby',
       seat,
+      isPublic: room.isPublic,
+      autoStartAt: room.autoStartAt,
       players: room.players.map((p, i) => ({
         name: p.name,
         connected: p.connected,
@@ -323,6 +398,7 @@ export class RoomManager {
       rooms.push({
         code: room.code,
         phase: room.game?.phase ?? 'lobby',
+        isPublic: room.isPublic,
         playerCount: room.players.length,
         connectedCount,
         round: room.game?.round ?? null,
@@ -351,6 +427,25 @@ export class RoomManager {
     }
     for (const [key, claim] of this.claims) {
       if (now > claim.expiresAt || !this.rooms.has(claim.roomCode)) this.claims.delete(key);
+    }
+  }
+
+  /**
+   * A public lobby with enough players counts down before starting itself, so
+   * strangers still trickling in get a chance to grab a seat; it fills instead
+   * of waiting once full.
+   */
+  private recomputePublicAutoStart(room: Room, now: number = Date.now()): void {
+    if (!room.isPublic || room.game) {
+      room.autoStartAt = null;
+      return;
+    }
+    if (room.players.length >= MAX_PLAYERS) {
+      room.autoStartAt = now;
+    } else if (room.players.length >= MIN_PLAYERS) {
+      if (room.autoStartAt === null) room.autoStartAt = now + PUBLIC_AUTO_START_DELAY_MS;
+    } else {
+      room.autoStartAt = null;
     }
   }
 
