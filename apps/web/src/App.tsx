@@ -173,6 +173,7 @@ export default function App() {
           clearSession();
           setState(null);
         }}
+        onNotice={showToast}
       />
     );
   }
