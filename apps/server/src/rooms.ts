@@ -191,6 +191,7 @@ export class RoomManager {
     const room = this.room(code);
     if (this.seat(room, hostToken) !== 0) throw new GameError('not_host', 'Only the host can add a bot');
     if (room.game) throw new GameError('already_started', 'You cannot add a bot once the game has started');
+    if (room.isPublic) throw new GameError('public_room', 'Bots are not allowed on public tables');
     if (room.players.length >= MAX_PLAYERS) throw new GameError('room_full', 'This room is full');
     const name = this.nextBotName(room);
     const token = randomBytes(16).toString('hex');
@@ -207,6 +208,9 @@ export class RoomManager {
     }
     if (room.game) {
       throw new GameError('already_started', 'You cannot remove a bot once the game has started');
+    }
+    if (room.isPublic) {
+      throw new GameError('public_room', 'Bots are not allowed on public tables');
     }
     const target = room.players[seat];
     if (!target?.isBot) throw new GameError('not_a_bot', 'That seat is not a bot');

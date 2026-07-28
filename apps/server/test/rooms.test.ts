@@ -124,6 +124,12 @@ describe('lobby bots', () => {
     expect(rooms.clientState(host.code, host.token).players).toHaveLength(1);
     expect(() => rooms.removeBot(host.code, host.token, 0)).toThrow(/bot/i);
   });
+
+  test('bots cannot be added to a public quick-match table', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.quickMatch('Ana');
+    expect(() => rooms.addBot(host.code, host.token)).toThrow(/public/i);
+  });
 });
 
 describe('public quick match', () => {
