@@ -648,6 +648,13 @@ button {
 
 .hand::-webkit-scrollbar { display: none; }
 
+.hand__note {
+  text-align: center;
+  color: var(--gold-bright);
+  font-size: 0.8rem;
+  padding: 2px 0 4px;
+}
+
 .hand .card {
   flex: 0 0 auto;
   margin-left: -18px;
@@ -668,6 +675,12 @@ button {
 .hand .card--raised {
   transform: translateY(-10px) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 1.6deg));
   box-shadow: 0 0 0 2px var(--gold), 0 10px 26px #d9ab5a45;
+}
+
+.hand .card--queued {
+  transform: translateY(-6px) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 1.6deg));
+  outline: 2px dashed var(--gold-bright);
+  outline-offset: 3px;
 }
 
 /* ── the cards themselves ── */

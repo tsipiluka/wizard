@@ -64,6 +64,7 @@ export function PlayingCard({
   size = 'md',
   raised = false,
   dimmed = false,
+  queued = false,
   onClick,
   style,
 }: {
@@ -71,6 +72,7 @@ export function PlayingCard({
   size?: 'sm' | 'md' | 'lg';
   raised?: boolean;
   dimmed?: boolean;
+  queued?: boolean;
   onClick?: () => void;
   style?: React.CSSProperties;
 }) {
@@ -80,6 +82,7 @@ export function PlayingCard({
     card.kind === 'suit' ? `card--${card.suit}` : `card--${card.kind}`,
     raised ? 'card--raised' : '',
     dimmed ? 'card--dimmed' : '',
+    queued ? 'card--queued' : '',
     onClick ? 'card--tappable' : '',
   ]
     .filter(Boolean)
