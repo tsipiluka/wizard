@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EMOTES, type ClientState, type EmoteId, type Suit, type TrickPlay } from '@wizard/shared';
-import { PlayingCard, SUIT_ICONS, sortHand } from '../cards';
+import { cardLabel, PlayingCard, SUIT_ICONS, sortHand } from '../cards';
 import { EMOTE_BUTTON_ICON, EMOTE_ICONS } from '../emoteIcons';
 import type { LiveEmote } from '../App';
 import { MoveDeviceSheet } from './MoveDevice';
@@ -23,6 +23,7 @@ export function Game({
   onChooseTrump,
   onAgain,
   onExit,
+  onNotice,
 }: {
   state: ClientState;
   emotes: LiveEmote[];
@@ -34,6 +35,7 @@ export function Game({
   onChooseTrump: (suit: Suit) => void;
   onAgain: () => void;
   onExit: () => void;
+  onNotice: (message: string) => void;
 }) {
   const { seat, players } = state;
   const n = players.length;
@@ -43,6 +45,7 @@ export function Game({
   const [showEmotes, setShowEmotes] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showMove, setShowMove] = useState(false);
+  const [queuedCardId, setQueuedCardId] = useState<string | null>(null);
   const emoteFor = (s: number) => emotes.find((e) => e.seat === s);
 
   // When a trick completes the server clears currentTrick immediately;
@@ -63,8 +66,39 @@ export function Game({
   const winnerIndex = heldTrick?.winnerIndex ?? null;
 
   const hand = useMemo(() => sortHand(state.hand), [state.hand]);
-  const legal = new Set(state.legalIds);
+  const legal = useMemo(() => new Set(state.legalIds), [state.legalIds]);
   const canPlay = state.phase === 'playing' && myTurn && !heldTrick;
+
+  /**
+   * Plays immediately if it's legally your turn; otherwise toggles the card
+   * as queued so the resolving effect below can play it once your turn comes.
+   */
+  const handleCardClick = (cardId: string) => {
+    if (canPlay && legal.has(cardId)) {
+      onPlay(cardId);
+      return;
+    }
+    if (state.phase === 'playing') {
+      setQueuedCardId((prev) => (prev === cardId ? null : cardId));
+    }
+  };
+
+  // Resolve a queued card once it's actually playable, or drop it if it
+  // turned out illegal (led suit was established after it was queued).
+  useEffect(() => {
+    if (!queuedCardId) return;
+    if (state.phase !== 'playing' || !hand.some((c) => c.id === queuedCardId)) {
+      setQueuedCardId(null);
+      return;
+    }
+    if (!canPlay) return;
+    if (legal.has(queuedCardId)) {
+      onPlay(queuedCardId);
+    } else {
+      onNotice("That card wasn't playable — pick another.");
+    }
+    setQueuedCardId(null);
+  }, [queuedCardId, state.phase, canPlay, legal, hand, onPlay, onNotice]);
 
   const opponents = Array.from({ length: n - 1 }, (_, i) => (seat + 1 + i) % n);
 
@@ -246,13 +280,19 @@ export function Game({
               key={card.id}
               card={card}
               size="lg"
-              raised={canPlay && legal.has(card.id)}
-              dimmed={canPlay && !legal.has(card.id)}
-              onClick={canPlay && legal.has(card.id) ? () => onPlay(card.id) : undefined}
+              raised={canPlay && legal.has(card.id) && queuedCardId !== card.id}
+              dimmed={canPlay && !legal.has(card.id) && queuedCardId !== card.id}
+              queued={queuedCardId === card.id}
+              onClick={state.phase === 'playing' ? () => handleCardClick(card.id) : undefined}
               style={{ ['--i' as string]: i, ['--n' as string]: hand.length }}
             />
           ))}
         </div>
+        {queuedCardId && (
+          <p className="hand__note">
+            {cardLabel(hand.find((c) => c.id === queuedCardId)!)} queued — plays on your turn
+          </p>
+        )}
       </footer>
 
       {showRoundEnd && roundScores && (
