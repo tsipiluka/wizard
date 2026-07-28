@@ -10,6 +10,8 @@ import { registerAdmin } from './admin';
 import { RoomManager } from './rooms';
 
 const ROUND_END_DELAY_MS = 7000;
+const BOT_MIN_DELAY_MS = 700;
+const BOT_MAX_DELAY_MS = 1800;
 
 type Ack = (r: Record<string, unknown> | ErrorReply) => void;
 
@@ -58,11 +60,13 @@ export async function buildServer(): Promise<BuiltServer> {
     clearInterval(sweeper);
     for (const timer of roundTimers.values()) clearTimeout(timer);
     for (const timer of publicStartTimers.values()) clearTimeout(timer);
+    for (const timer of botTimers.values()) clearTimeout(timer);
     await io.close();
   });
 
   const roundTimers = new Map<string, NodeJS.Timeout>();
   const publicStartTimers = new Map<string, NodeJS.Timeout>();
+  const botTimers = new Map<string, NodeJS.Timeout>();
 
   /** Push each connected socket in the room its own redacted snapshot. */
   async function broadcast(code: string): Promise<void> {
@@ -77,6 +81,26 @@ export async function buildServer(): Promise<BuiltServer> {
         // player no longer in the room (left lobby); ignore
       }
     }
+    scheduleBotTurn(code);
+  }
+
+  /** (Re)arm the timer that lets a pending bot take its turn after a short "thinking" delay. */
+  function scheduleBotTurn(code: string): void {
+    clearTimeout(botTimers.get(code));
+    botTimers.delete(code);
+    if (rooms.pendingBotSeat(code) === null) return;
+    const delay = BOT_MIN_DELAY_MS + Math.random() * (BOT_MAX_DELAY_MS - BOT_MIN_DELAY_MS);
+    botTimers.set(
+      code,
+      setTimeout(() => {
+        botTimers.delete(code);
+        try {
+          if (rooms.playBotTurn(code)) void broadcast(code);
+        } catch (err) {
+          app.log.error({ err, code }, "bot failed to take its turn");
+        }
+      }, delay),
+    );
   }
 
   /** Evict every socket still holding a superseded seat token. */
@@ -235,6 +259,26 @@ export async function buildServer(): Promise<BuiltServer> {
 
     socket.on('room:start', intent((code, token) => rooms.start(code, token)));
     socket.on('room:again', intent((code, token) => rooms.again(code, token)));
+
+    socket.on(
+      'room:addBot',
+      safe((_payload, cb) => {
+        if (!data.code || !data.token) throw new GameError('no_room', 'You are not in a room');
+        const { seat, name } = rooms.addBot(data.code, data.token);
+        cb({ ok: true, seat, name });
+        void broadcast(data.code);
+      }),
+    );
+
+    socket.on(
+      'room:removeBot',
+      safe((payload, cb) => {
+        if (!data.code || !data.token) throw new GameError('no_room', 'You are not in a room');
+        rooms.removeBot(data.code, data.token, Number(payload.seat));
+        cb({ ok: true });
+        void broadcast(data.code);
+      }),
+    );
 
     socket.on('game:chooseTrump', (...args: unknown[]) => {
       const payload = (typeof args[0] === 'object' && args[0]) || {};
