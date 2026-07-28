@@ -6,6 +6,7 @@ export interface PublicPlayer {
   name: string;
   connected: boolean;
   isHost: boolean;
+  isBot: boolean;
   handCount: number;
   bid: number | null;
   tricksWon: number;
@@ -57,6 +58,10 @@ export interface ClientToServerEvents {
   'room:leave': (cb: (r: Reply<object>) => void) => void;
   'room:start': (cb: (r: Reply<object>) => void) => void;
   'room:again': (cb: (r: Reply<object>) => void) => void;
+  /** Fill an empty seat with an AI-controlled player; host-only, lobby-only. */
+  'room:addBot': (cb: (r: Reply<{ seat: number; name: string }>) => void) => void;
+  /** Remove a bot from its seat; host-only, lobby-only. */
+  'room:removeBot': (payload: { seat: number }, cb: (r: Reply<object>) => void) => void;
   'game:chooseTrump': (payload: { suit: Suit }, cb: (r: Reply<object>) => void) => void;
   'game:bid': (payload: { bid: number }, cb: (r: Reply<object>) => void) => void;
   'game:play': (payload: { cardId: string }, cb: (r: Reply<object>) => void) => void;
