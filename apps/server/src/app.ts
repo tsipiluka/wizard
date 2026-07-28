@@ -21,12 +21,12 @@ export interface BuiltServer {
   rooms: RoomManager;
 }
 
-export async function buildServer(): Promise<BuiltServer> {
+export async function buildServer(rng: () => number = Math.random): Promise<BuiltServer> {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
 
   app.get('/healthz', async () => ({ ok: true }));
 
-  const rooms = new RoomManager();
+  const rooms = new RoomManager(rng);
   registerAdmin(app, rooms, Date.now());
 
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +81,7 @@ export async function buildServer(): Promise<BuiltServer> {
         // player no longer in the room (left lobby); ignore
       }
     }
+    if (rooms.phase(code) === 'roundEnd' && !roundTimers.has(code)) scheduleAdvance(code);
     scheduleBotTurn(code);
   }
 
@@ -201,13 +202,6 @@ export async function buildServer(): Promise<BuiltServer> {
         fn(code, data.token);
         cb({ ok: true });
         void broadcast(code);
-        try {
-          if (data.token && rooms.clientState(code, data.token).phase === 'roundEnd') {
-            scheduleAdvance(code);
-          }
-        } catch (err) {
-          app.log.error({ err, code }, 'post-intent bookkeeping failed');
-        }
       });
 
     socket.on(

@@ -180,8 +180,10 @@ export class RoomManager {
     const room = this.room(code);
     if (room.game) throw new GameError('already_started', 'You cannot leave a running game');
     room.players = room.players.filter((p) => p.token !== token);
-    if (room.players.length === 0) this.rooms.delete(code);
-    else {
+    // no humans left to ever hold the host seat, so the room can't be recovered
+    if (room.players.length === 0 || room.players.every((p) => p.isBot)) {
+      this.rooms.delete(code);
+    } else {
       room.lastActivity = Date.now();
       this.recomputePublicAutoStart(room);
     }
@@ -345,8 +347,9 @@ export class RoomManager {
     if (room && player) {
       player.connected = connected;
       room.lastActivity = Date.now();
-      // an empty lobby (not a running game) can be dropped right away
-      if (!room.game && room.players.every((p) => !p.connected)) this.rooms.delete(code);
+      // an empty lobby (not a running game) can be dropped right away; bots have
+      // no connection of their own and never count toward "still connected"
+      if (!room.game && room.players.every((p) => p.isBot || !p.connected)) this.rooms.delete(code);
     }
   }
 
@@ -357,6 +360,11 @@ export class RoomManager {
    */
   publicAutoStartAt(code: string): number | null {
     return this.rooms.get(code)?.autoStartAt ?? null;
+  }
+
+  /** The room's current phase ('lobby' if no game is running), for scheduling — not client-facing. */
+  phase(code: string): 'lobby' | Phase {
+    return this.rooms.get(code)?.game?.phase ?? 'lobby';
   }
 
   /** Start a public lobby if its countdown has elapsed. Returns whether it did. */

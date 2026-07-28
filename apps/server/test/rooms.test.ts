@@ -130,6 +130,34 @@ describe('lobby bots', () => {
     const host = rooms.quickMatch('Ana');
     expect(() => rooms.addBot(host.code, host.token)).toThrow(/public/i);
   });
+
+  test('a lobby with only bots left is garbage-collected once the last human disconnects', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    rooms.addBot(host.code, host.token);
+    rooms.setConnected(host.code, host.token, false);
+    expect(() => rooms.clientState(host.code, host.token)).toThrow(/room/i);
+  });
+
+  test('the host leaving a table with bots seated deletes the room rather than leaving a bot as host', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    rooms.addBot(host.code, host.token);
+    rooms.addBot(host.code, host.token);
+    rooms.leave(host.code, host.token);
+    expect(() => rooms.join(host.code, 'Bob')).toThrow(/room/i);
+  });
+
+  test('phase() reports lobby before a game starts and the live game phase after', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    rooms.join(host.code, 'Bob');
+    rooms.join(host.code, 'Cy');
+    expect(rooms.phase(host.code)).toBe('lobby');
+    rooms.start(host.code, host.token);
+    expect(rooms.phase(host.code)).toBe(rooms.clientState(host.code, host.token).phase);
+    expect(rooms.phase(host.code)).not.toBe('lobby');
+  });
 });
 
 describe('bots take their own turns', () => {

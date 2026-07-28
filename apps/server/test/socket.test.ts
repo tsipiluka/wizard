@@ -166,3 +166,151 @@ describe('socket layer resilience', () => {
     expect(replay).toMatchObject({ ok: false, code: 'bad_claim' });
   });
 });
+
+/** Deterministic PRNG (mulberry32-family), same shape used by rooms.test.ts. */
+function seededRng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+interface PlayerView {
+  name: string;
+  connected: boolean;
+  isHost: boolean;
+  isBot: boolean;
+  bid: number | null;
+}
+
+interface StateView {
+  phase: string;
+  seat: number;
+  round: number;
+  dealerIndex: number;
+  turnIndex: number;
+  legalIds: string[];
+  players: PlayerView[];
+}
+
+/**
+ * Round 1's dealer is always seat 0 (the room creator) and its trick order is
+ * fixed (leftOfDealer..), so the human host always plays last there — which is
+ * exactly why the roundEnd-stall bug this suite targets was easy to miss by
+ * hand. Round 2's dealer rotates to seat 1, so its trick order shifts and a
+ * bot can end the round instead. Seed 2 was picked (by offline simulation
+ * against the exact same shared-engine + bot logic the server uses,
+ * including the 4 rng() ticks RoomManager.create() burns generating the room
+ * code before dealing the first round) to deterministically make round 1 end
+ * on the host's own play and round 2 end on a bot's play, so this test
+ * exercises the exact trigger condition without relying on luck.
+ */
+describe('bot-triggered round advancement (regression for the roundEnd stall)', () => {
+  let seededClose: () => Promise<void>;
+  let seededUrl: string;
+  const seededClients: Socket[] = [];
+
+  beforeAll(async () => {
+    // A dedicated rng, isolated from the global Math.random, so nothing else
+    // (socket.io session ids, etc.) can perturb the deterministic sequence
+    // this test relies on to force round 2 to end on a bot's play.
+    const built = await buildServer(seededRng(2));
+    await built.app.listen({ port: 0, host: '127.0.0.1' });
+    const address = built.app.server.address();
+    if (typeof address === 'object' && address) seededUrl = `http://127.0.0.1:${address.port}`;
+    seededClose = async () => {
+      await built.app.close();
+    };
+  });
+
+  afterAll(async () => {
+    for (const c of seededClients) c.disconnect();
+    await seededClose();
+  });
+
+  function seededConnect(): Socket {
+    const socket = io(seededUrl, { forceNew: true });
+    seededClients.push(socket);
+    return socket;
+  }
+
+  test(
+    "a round that ends on a bot's play (not the host's) still advances to the next round",
+    async () => {
+      const host = seededConnect();
+      await new Promise<void>((resolve) => host.on('connect', () => resolve()));
+
+      const created = await ask<{ ok: boolean; code: string }>(host, 'room:create', { name: 'Ana' });
+      expect(created.ok).toBe(true);
+      await ask(host, 'room:addBot');
+      await ask(host, 'room:addBot');
+      const started = await ask<{ ok: boolean }>(host, 'room:start');
+      expect(started.ok).toBe(true);
+
+      const states: StateView[] = [];
+      let acting = false;
+      let actionError: string | null = null;
+
+      /** The bid the host is barred from (mirrors shared forbiddenBid, using client-visible fields). */
+      const forbiddenHostBid = (s: StateView): number | null => {
+        if (s.phase !== 'bidding') return null;
+        const bids = s.players.map((p) => p.bid);
+        const pending = bids.filter((b) => b === null).length;
+        if (pending !== 1 || bids[s.seat] !== null) return null;
+        const others = bids.reduce((sum: number, b) => sum + (b ?? 0), 0);
+        const gap = s.round - others;
+        return gap >= 0 && gap <= s.round ? gap : null;
+      };
+
+      const maybeAct = async (s: StateView): Promise<void> => {
+        if (acting) return;
+        if (s.phase === 'choosingTrump' && s.dealerIndex === s.seat) {
+          acting = true;
+          const res = await ask<{ ok: boolean; code?: string }>(host, 'game:chooseTrump', {
+            suit: 'red',
+          });
+          if (!res.ok) actionError = `chooseTrump failed: ${res.code}`;
+          acting = false;
+        } else if (s.phase === 'bidding' && s.turnIndex === s.seat) {
+          acting = true;
+          const forbidden = forbiddenHostBid(s);
+          const bid = forbidden === 0 ? 1 : 0;
+          const res = await ask<{ ok: boolean; code?: string }>(host, 'game:bid', { bid });
+          if (!res.ok) actionError = `bid failed: ${res.code}`;
+          acting = false;
+        } else if (s.phase === 'playing' && s.turnIndex === s.seat) {
+          acting = true;
+          const res = await ask<{ ok: boolean; code?: string }>(host, 'game:play', {
+            cardId: s.legalIds[0],
+          });
+          if (!res.ok) actionError = `play failed: ${res.code}`;
+          acting = false;
+        }
+      };
+
+      host.on('state', (s: StateView) => {
+        states.push(s);
+        void maybeAct(s);
+      });
+
+      // let the just-issued room:start's own state broadcast (if any) be picked up
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        if (actionError) throw new Error(actionError);
+        const latest = states[states.length - 1];
+        if (latest && latest.round >= 3) break;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+
+      if (actionError) throw new Error(actionError);
+      const latest = states[states.length - 1];
+      expect(latest).toBeDefined();
+      expect(latest!.round).toBeGreaterThanOrEqual(3);
+    },
+    50000,
+  );
+});
