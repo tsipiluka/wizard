@@ -68,6 +68,7 @@ export function Game({
   const hand = useMemo(() => sortHand(state.hand), [state.hand]);
   const legal = useMemo(() => new Set(state.legalIds), [state.legalIds]);
   const canPlay = state.phase === 'playing' && myTurn && !heldTrick;
+  const queuedCard = queuedCardId ? hand.find((c) => c.id === queuedCardId) : undefined;
 
   /**
    * Plays immediately if it's legally your turn; otherwise toggles the card
@@ -288,9 +289,9 @@ export function Game({
             />
           ))}
         </div>
-        {queuedCardId && (
+        {queuedCard && (
           <p className="hand__note">
-            {cardLabel(hand.find((c) => c.id === queuedCardId)!)} queued — plays on your turn
+            {cardLabel(queuedCard)} queued — plays on your turn
           </p>
         )}
       </footer>
