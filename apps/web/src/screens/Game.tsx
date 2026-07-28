@@ -76,6 +76,7 @@ export function Game({
    */
   const handleCardClick = (cardId: string) => {
     if (canPlay && legal.has(cardId)) {
+      setQueuedCardId(null);
       onPlay(cardId);
       return;
     }
@@ -289,11 +290,9 @@ export function Game({
             />
           ))}
         </div>
-        {queuedCard && (
-          <p className="hand__note">
-            {cardLabel(queuedCard)} queued — plays on your turn
-          </p>
-        )}
+        <p className="hand__note" role="status">
+          {queuedCard ? `${cardLabel(queuedCard)} queued — plays on your turn` : ' '}
+        </p>
       </footer>
 
       {showRoundEnd && roundScores && (

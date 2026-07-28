@@ -653,6 +653,8 @@ button {
   color: var(--gold-bright);
   font-size: 0.8rem;
   padding: 2px 0 4px;
+  min-height: calc(0.8rem * 1.6 + 6px);
+  text-transform: capitalize;
 }
 
 .hand .card {
@@ -681,6 +683,7 @@ button {
   transform: translateY(-6px) rotate(calc((var(--i) - (var(--n) - 1) / 2) * 1.6deg));
   outline: 2px dashed var(--gold-bright);
   outline-offset: 3px;
+  z-index: 1;
 }
 
 /* ── the cards themselves ── */
