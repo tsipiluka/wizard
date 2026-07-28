@@ -66,6 +66,66 @@ describe('lobby', () => {
   });
 });
 
+describe('lobby bots', () => {
+  test('the host can add a bot, which gets a themed name and counts toward the player list', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    const { seat, name } = rooms.addBot(host.code, host.token);
+    expect(seat).toBe(1);
+    expect(name).toMatch(/^(Golem|Familiar|Homunculus|Specter|Wraith)$/);
+    const state = rooms.clientState(host.code, host.token);
+    expect(state.players).toHaveLength(2);
+    expect(state.players[1]!.isBot).toBe(true);
+    expect(state.players[0]!.isBot).toBe(false);
+  });
+
+  test('adding several bots gives each a distinct name', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    const names = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      const { name } = rooms.addBot(host.code, host.token);
+      names.add(name);
+    }
+    expect(names.size).toBe(5);
+  });
+
+  test('only the host can add or remove a bot', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    const bob = rooms.join(host.code, 'Bob');
+    expect(() => rooms.addBot(host.code, bob.token)).toThrow(/host/i);
+    rooms.addBot(host.code, host.token);
+    expect(() => rooms.removeBot(host.code, bob.token, 2)).toThrow(/host/i);
+  });
+
+  test('a bot cannot be added once the room is full', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    for (let i = 0; i < 5; i++) rooms.addBot(host.code, host.token);
+    expect(() => rooms.addBot(host.code, host.token)).toThrow(/full/i);
+  });
+
+  test('a bot cannot be added or removed once the game has started', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    rooms.addBot(host.code, host.token);
+    rooms.join(host.code, 'Bob');
+    rooms.start(host.code, host.token);
+    expect(() => rooms.addBot(host.code, host.token)).toThrow(/started/i);
+    expect(() => rooms.removeBot(host.code, host.token, 1)).toThrow(/started/i);
+  });
+
+  test('removing a bot frees its seat; removing a non-bot seat is rejected', () => {
+    const rooms = new RoomManager(seededRng(1));
+    const host = rooms.create('Ana');
+    rooms.addBot(host.code, host.token);
+    rooms.removeBot(host.code, host.token, 1);
+    expect(rooms.clientState(host.code, host.token).players).toHaveLength(1);
+    expect(() => rooms.removeBot(host.code, host.token, 0)).toThrow(/bot/i);
+  });
+});
+
 describe('public quick match', () => {
   test('the first quick-matcher opens a new public table', () => {
     const rooms = new RoomManager(seededRng(6));

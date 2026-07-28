@@ -25,11 +25,15 @@ const CLAIM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no look-alikes (I/
 /** How long a public table waits for more players once it has enough to start. */
 const PUBLIC_AUTO_START_DELAY_MS = 20 * 1000;
 
+/** Themed bot names, assigned in this order; falls back to "Bot N" if exhausted. */
+const BOT_NAMES = ['Golem', 'Familiar', 'Homunculus', 'Specter', 'Wraith'];
+
 interface Player {
   name: string;
   token: string;
   connected: boolean;
   lastEmoteAt: number;
+  isBot: boolean;
 }
 
 interface Room {
@@ -97,7 +101,7 @@ export class RoomManager {
     const now = Date.now();
     this.rooms.set(code, {
       code,
-      players: [{ name: sanitizeName(name), token, connected: true, lastEmoteAt: 0 }],
+      players: [{ name: sanitizeName(name), token, connected: true, lastEmoteAt: 0, isBot: false }],
       game: null,
       lastActivity: now,
       createdAt: now,
@@ -116,7 +120,7 @@ export class RoomManager {
     for (const room of this.rooms.values()) {
       if (room.isPublic && !room.game && room.players.length < MAX_PLAYERS) {
         const token = randomBytes(16).toString('hex');
-        room.players.push({ name: clean, token, connected: true, lastEmoteAt: 0 });
+        room.players.push({ name: clean, token, connected: true, lastEmoteAt: 0, isBot: false });
         room.lastActivity = Date.now();
         this.recomputePublicAutoStart(room);
         return { code: room.code, token };
@@ -132,7 +136,7 @@ export class RoomManager {
     const now = Date.now();
     const room: Room = {
       code,
-      players: [{ name: clean, token, connected: true, lastEmoteAt: 0 }],
+      players: [{ name: clean, token, connected: true, lastEmoteAt: 0, isBot: false }],
       game: null,
       lastActivity: now,
       createdAt: now,
@@ -164,6 +168,7 @@ export class RoomManager {
       token: newToken,
       connected: true,
       lastEmoteAt: 0,
+      isBot: false,
     });
     room.lastActivity = Date.now();
     this.recomputePublicAutoStart(room);
@@ -179,6 +184,34 @@ export class RoomManager {
       room.lastActivity = Date.now();
       this.recomputePublicAutoStart(room);
     }
+  }
+
+  /** Fill an empty seat with an AI-controlled player. Host-only, lobby-only. */
+  addBot(code: string, hostToken: string): { seat: number; name: string } {
+    const room = this.room(code);
+    if (this.seat(room, hostToken) !== 0) throw new GameError('not_host', 'Only the host can add a bot');
+    if (room.game) throw new GameError('already_started', 'You cannot add a bot once the game has started');
+    if (room.players.length >= MAX_PLAYERS) throw new GameError('room_full', 'This room is full');
+    const name = this.nextBotName(room);
+    const token = randomBytes(16).toString('hex');
+    room.players.push({ name, token, connected: true, lastEmoteAt: 0, isBot: true });
+    room.lastActivity = Date.now();
+    return { seat: room.players.length - 1, name };
+  }
+
+  /** Remove a bot from its seat. Host-only, lobby-only. */
+  removeBot(code: string, hostToken: string, seat: number): void {
+    const room = this.room(code);
+    if (this.seat(room, hostToken) !== 0) {
+      throw new GameError('not_host', 'Only the host can remove a bot');
+    }
+    if (room.game) {
+      throw new GameError('already_started', 'You cannot remove a bot once the game has started');
+    }
+    const target = room.players[seat];
+    if (!target?.isBot) throw new GameError('not_a_bot', 'That seat is not a bot');
+    room.players.splice(seat, 1);
+    room.lastActivity = Date.now();
   }
 
   start(code: string, token: string): void {
@@ -350,6 +383,7 @@ export class RoomManager {
         name: p.name,
         connected: p.connected,
         isHost: i === 0,
+        isBot: p.isBot,
         handCount: game?.hands[i]?.length ?? 0,
         bid: game?.bids[i] ?? null,
         tricksWon: game?.tricksWon[i] ?? 0,
@@ -447,6 +481,16 @@ export class RoomManager {
     } else {
       room.autoStartAt = null;
     }
+  }
+
+  /** The next unused themed bot name, or a numbered fallback once the pool is exhausted. */
+  private nextBotName(room: Room): string {
+    const used = new Set(room.players.map((p) => p.name));
+    const free = BOT_NAMES.find((n) => !used.has(n));
+    if (free) return free;
+    let i = 1;
+    while (used.has(`Bot ${i}`)) i++;
+    return `Bot ${i}`;
   }
 
   private applyIntent(
