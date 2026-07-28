@@ -17,6 +17,7 @@ import {
   placeBid,
   playCard,
 } from '@wizard/shared';
+import { chooseBotBid, chooseBotCard, chooseBotTrump } from './bot';
 
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 /** Long enough to walk to the other device, short enough that a stale photo is useless. */
@@ -251,8 +252,9 @@ export class RoomManager {
 
   play(code: string, token: string, cardId: string): void {
     const room = this.room(code);
+    const seat = this.seat(room, token);
     const wasOver = room.game?.phase === 'gameOver';
-    this.applyIntent(code, token, (game, seat) => playCard(game, seat, cardId));
+    this.applyIntentAtSeat(room, seat, (game, s) => playCard(game, s, cardId));
     if (!wasOver && room.game?.phase === 'gameOver') this.completedGames++;
   }
 
@@ -372,6 +374,41 @@ export class RoomManager {
     return true;
   }
 
+  /** The bot seat currently awaited, if any — used to decide whether to schedule a bot move. */
+  pendingBotSeat(code: string): number | null {
+    const room = this.rooms.get(code);
+    if (!room) return null;
+    const actor = this.pendingActor(room);
+    if (!actor) return null;
+    return room.players[actor.seat]?.isBot ? actor.seat : null;
+  }
+
+  /** Compute and apply the pending bot's decision, if any. Returns whether it did. */
+  playBotTurn(code: string): boolean {
+    const room = this.rooms.get(code);
+    if (!room) return false;
+    const actor = this.pendingActor(room);
+    if (!actor || !room.players[actor.seat]?.isBot) return false;
+    const game = room.game!;
+    switch (actor.kind) {
+      case 'chooseTrump':
+        this.applyIntentAtSeat(room, actor.seat, (g, seat) =>
+          chooseTrump(g, seat, chooseBotTrump(g, seat)),
+        );
+        break;
+      case 'bid':
+        this.applyIntentAtSeat(room, actor.seat, (g, seat) => placeBid(g, seat, chooseBotBid(g, seat)));
+        break;
+      case 'play': {
+        const wasOver = game.phase === 'gameOver';
+        this.applyIntentAtSeat(room, actor.seat, (g, seat) => playCard(g, seat, chooseBotCard(g, seat)));
+        if (!wasOver && room.game?.phase === 'gameOver') this.completedGames++;
+        break;
+      }
+    }
+    return true;
+  }
+
   /** Redacted per-player snapshot: the only view of a game that leaves the server. */
   clientState(code: string, token: string): ClientState {
     const room = this.room(code);
@@ -487,6 +524,26 @@ export class RoomManager {
     }
   }
 
+  /**
+   * The seat whose action is currently awaited (dealer for choosingTrump,
+   * turnIndex otherwise), or null if the game isn't running or the phase
+   * needs no seat action (roundEnd/gameOver).
+   */
+  private pendingActor(room: Room): { seat: number; kind: 'chooseTrump' | 'bid' | 'play' } | null {
+    const game = room.game;
+    if (!game) return null;
+    switch (game.phase) {
+      case 'choosingTrump':
+        return { seat: game.dealerIndex, kind: 'chooseTrump' };
+      case 'bidding':
+        return { seat: game.turnIndex, kind: 'bid' };
+      case 'playing':
+        return { seat: game.turnIndex, kind: 'play' };
+      default:
+        return null;
+    }
+  }
+
   /** The next unused themed bot name, or a numbered fallback once the pool is exhausted. */
   private nextBotName(room: Room): string {
     const used = new Set(room.players.map((p) => p.name));
@@ -497,6 +554,17 @@ export class RoomManager {
     return `Bot ${i}`;
   }
 
+  /** Apply a game action at a known seat — the core both token-based and bot-driven paths share. */
+  private applyIntentAtSeat(
+    room: Room,
+    seat: number,
+    fn: (game: GameState, seat: number) => GameState,
+  ): void {
+    if (!room.game) throw new GameError('no_game', 'The game has not started');
+    room.game = fn(room.game, seat);
+    room.lastActivity = Date.now();
+  }
+
   private applyIntent(
     code: string,
     token: string,
@@ -504,9 +572,7 @@ export class RoomManager {
   ): void {
     const room = this.room(code);
     const seat = this.seat(room, token);
-    if (!room.game) throw new GameError('no_game', 'The game has not started');
-    room.game = fn(room.game, seat);
-    room.lastActivity = Date.now();
+    this.applyIntentAtSeat(room, seat, fn);
   }
 
   private room(code: string): Room {

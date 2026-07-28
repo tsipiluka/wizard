@@ -132,6 +132,77 @@ describe('lobby bots', () => {
   });
 });
 
+describe('bots take their own turns', () => {
+  /** Drive one round to completion: the human host bids 0/plays first-legal, bots via playBotTurn. */
+  function playRoundWithBots(rooms: RoomManager, code: string, hostToken: string): void {
+    let snap = rooms.clientState(code, hostToken);
+    while (snap.phase !== 'roundEnd' && snap.phase !== 'gameOver') {
+      if (rooms.playBotTurn(code)) {
+        snap = rooms.clientState(code, hostToken);
+        continue;
+      }
+      if (snap.phase === 'choosingTrump') {
+        rooms.chooseTrump(code, hostToken, 'red');
+      } else if (snap.phase === 'bidding') {
+        rooms.bid(code, hostToken, 0);
+      } else if (snap.phase === 'playing') {
+        rooms.play(code, hostToken, snap.legalIds[0]!);
+      }
+      snap = rooms.clientState(code, hostToken);
+    }
+  }
+
+  test('pendingBotSeat identifies the bot whose turn it is, and stays null on the lobby/human turns', () => {
+    const rooms = new RoomManager(seededRng(11));
+    const host = rooms.create('Ana');
+    rooms.addBot(host.code, host.token);
+    rooms.join(host.code, 'Bob'); // MIN_PLAYERS is 3; host + 1 bot alone can't start
+    expect(rooms.pendingBotSeat(host.code)).toBeNull(); // still in lobby
+    rooms.start(host.code, host.token);
+    const state = rooms.clientState(host.code, host.token);
+    if (state.phase === 'choosingTrump') {
+      // round 1's dealer is always the human host (seat 0), never a bot
+      expect(rooms.pendingBotSeat(host.code)).toBeNull();
+      rooms.chooseTrump(host.code, host.token, 'red');
+    }
+    // bidding always starts left of the dealer: seat 1, the bot
+    expect(rooms.pendingBotSeat(host.code)).toBe(1);
+  });
+
+  test('playBotTurn resolves the pending bot action and returns false once nothing is pending', () => {
+    const rooms = new RoomManager(seededRng(11));
+    const host = rooms.create('Ana');
+    expect(rooms.playBotTurn(host.code)).toBe(false); // lobby: nothing pending
+    rooms.addBot(host.code, host.token);
+    rooms.join(host.code, 'Bob');
+    rooms.start(host.code, host.token);
+    const state = rooms.clientState(host.code, host.token);
+    if (state.phase === 'choosingTrump') rooms.chooseTrump(host.code, host.token, 'red');
+    // bidding: seat 1 (bot) goes first, seat 2 (Bob, human) goes second
+    expect(rooms.playBotTurn(host.code)).toBe(true);
+    expect(rooms.pendingBotSeat(host.code)).toBeNull(); // Bob's turn now, not a bot's
+    expect(rooms.playBotTurn(host.code)).toBe(false); // no-op: nothing bot-pending
+  });
+
+  test('a full game with 2 bots completes without any bot ever attempting an illegal move', () => {
+    const rooms = new RoomManager(seededRng(11));
+    const host = rooms.create('Ana');
+    rooms.addBot(host.code, host.token);
+    rooms.addBot(host.code, host.token);
+    rooms.start(host.code, host.token);
+
+    expect(() => {
+      for (let round = 1; round <= 20; round++) {
+        playRoundWithBots(rooms, host.code, host.token);
+        if (round < 20) rooms.advance(host.code);
+      }
+    }).not.toThrow();
+
+    expect(rooms.stats().completedGames).toBe(1);
+    expect(rooms.clientState(host.code, host.token).phase).toBe('gameOver');
+  });
+});
+
 describe('public quick match', () => {
   test('the first quick-matcher opens a new public table', () => {
     const rooms = new RoomManager(seededRng(6));
