@@ -395,6 +395,13 @@ button {
 
 .lobby__name { flex: 1; text-align: left; }
 
+.lobby__removebot {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
 /* ── game frame ── */
 
 .game {
@@ -536,6 +543,12 @@ button {
 }
 
 .seatchip__dealer { color: var(--gold); margin-left: 4px; }
+
+.seatchip__name .tag {
+  margin-left: 4px;
+  font-size: 0.56rem;
+  padding: 1px 6px;
+}
 
 .seatchip__meta { font-size: 0.78rem; color: var(--text-dim); }
 

@@ -169,6 +169,7 @@ export function Game({
               <span className="seatchip__name">
                 {p.name}
                 {state.dealerIndex === i && <span className="seatchip__dealer" title="Dealer">✦</span>}
+                {p.isBot && <span className="tag">bot</span>}
               </span>
               <span className="seatchip__meta">
                 {p.bid !== null ? `bid ${p.bid} · took ${p.tricksWon}` : '· · ·'}

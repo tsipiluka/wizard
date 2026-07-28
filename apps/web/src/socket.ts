@@ -58,6 +58,8 @@ export const api = {
   leave: () => ask((cb) => socket.emit('room:leave', cb)),
   start: () => ask((cb) => socket.emit('room:start', cb)),
   again: () => ask((cb) => socket.emit('room:again', cb)),
+  addBot: () => ask<{ seat: number; name: string }>((cb) => socket.emit('room:addBot', cb)),
+  removeBot: (seat: number) => ask((cb) => socket.emit('room:removeBot', { seat }, cb)),
   chooseTrump: (suit: Suit) => ask((cb) => socket.emit('game:chooseTrump', { suit }, cb)),
   bid: (bid: number) => ask((cb) => socket.emit('game:bid', { bid }, cb)),
   play: (cardId: string) => ask((cb) => socket.emit('game:play', { cardId }, cb)),

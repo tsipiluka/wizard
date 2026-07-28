@@ -5,10 +5,14 @@ export function Lobby({
   state,
   onStart,
   onLeave,
+  onAddBot,
+  onRemoveBot,
 }: {
   state: ClientState;
   onStart: () => void;
   onLeave: () => void;
+  onAddBot: () => void;
+  onRemoveBot: (seat: number) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const isHost = state.players[state.seat]?.isHost ?? false;
@@ -80,6 +84,17 @@ export function Lobby({
                 {i === state.seat ? ' (you)' : ''}
               </span>
               {p.isHost && <span className="tag">host</span>}
+              {p.isBot && <span className="tag">bot</span>}
+              {isHost && p.isBot && (
+                <button
+                  type="button"
+                  className="lobby__removebot"
+                  onClick={() => onRemoveBot(i)}
+                  aria-label={`Remove ${p.name}`}
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
           {Array.from({ length: Math.max(0, 3 - state.players.length) }).map((_, i) => (
@@ -89,6 +104,11 @@ export function Lobby({
             </li>
           ))}
         </ul>
+        {isHost && !state.isPublic && state.players.length < 6 && (
+          <button type="button" className="btn btn--ghost btn--small" onClick={onAddBot}>
+            Add a bot
+          </button>
+        )}
       </section>
 
       {isHost ? (

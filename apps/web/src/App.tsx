@@ -154,7 +154,15 @@ export default function App() {
       />
     );
   } else if (state.phase === 'lobby') {
-    screen = <Lobby state={state} onStart={() => act(api.start)} onLeave={leaveRoom} />;
+    screen = (
+      <Lobby
+        state={state}
+        onStart={() => act(api.start)}
+        onLeave={leaveRoom}
+        onAddBot={() => act(api.addBot)}
+        onRemoveBot={(seat) => act(() => api.removeBot(seat))}
+      />
+    );
   } else {
     screen = (
       <Game
