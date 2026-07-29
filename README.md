@@ -99,6 +99,17 @@ npm run dev:server      # Fastify + Socket.IO on :8080
 npm run dev:web         # Vite dev server on :5173 (proxies /socket.io)
 ```
 
+If port 8080 is already taken locally, run the server on another port and
+point the Vite proxy at it:
+
+```bash
+PORT=8090 npm run dev:server
+```
+
+and update the `target` in `apps/web/vite.config.ts`'s `/socket.io` proxy
+entry to match (it currently points at `:8090` to match this repo's own dev
+setup, where 8080 is occupied by an unrelated local process).
+
 Open `http://localhost:5173` in several browser profiles/devices to play. The
 production server serves the built SPA itself: `npm run build`, then run
 `node apps/server/dist/index.js`.
