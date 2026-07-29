@@ -1262,4 +1262,14 @@ button {
   .hand {
     min-height: 168px;
   }
+
+  /* sheets: centered dialog instead of a bottom sheet */
+  .sheet__veil {
+    align-items: center;
+  }
+
+  .sheet {
+    max-width: 520px;
+    border-radius: 20px;
+  }
 }
