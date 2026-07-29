@@ -5,8 +5,7 @@
       "name": "wizard-server",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "@wizard/server"],
-      "port": 8080,
-      "autoPort": true
+      "port": 8090
     },
     {
       "name": "wizard-web",
