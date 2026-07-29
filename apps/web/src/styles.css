@@ -1264,6 +1264,12 @@ button {
     min-height: 168px;
   }
 
+  /* the emote button's offset is tuned against the mobile hand height;
+     re-clear the taller desktop hand + player bar so it doesn't overlap */
+  .emotebtn {
+    bottom: calc(261px + env(safe-area-inset-bottom));
+  }
+
   /* sheets: centered dialog instead of a bottom sheet */
   .sheet__veil {
     align-items: center;
