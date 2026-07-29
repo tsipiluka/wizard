@@ -1167,6 +1167,8 @@ button {
   .game { padding-top: 24px; }
   .card { width: 84px; height: 120px; }
   .card--lg { width: 96px; height: 138px; }
+  /* bigger cards make the hand taller than the emote button's offset accounts for */
+  .emotebtn { bottom: calc(239px + env(safe-area-inset-bottom)); }
 }
 
 /* ── desktop (1024px+): wider layout built on top of the mobile rules above;
