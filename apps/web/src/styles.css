@@ -1195,4 +1195,71 @@ button {
     height: 78px;
     font-size: 2.6rem;
   }
+
+  /* game: use the wider viewport instead of floating in a phone-width column */
+  .game {
+    max-width: 960px;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  /* opponents: wrap into a static row instead of a horizontal-scroll strip —
+     up to 5 opponents fit without ever needing to scroll */
+  .game__opponents {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    justify-content: center;
+  }
+
+  .seatchip {
+    min-width: 110px;
+  }
+
+  .seatchip__name {
+    font-size: 0.9rem;
+    max-width: 130px;
+  }
+
+  .seatchip__meta {
+    font-size: 0.84rem;
+  }
+
+  .seatchip__score {
+    font-size: 0.92rem;
+  }
+
+  /* cards: another size bump on top of the 700px one */
+  .card {
+    width: 96px;
+    height: 138px;
+  }
+
+  .card--sm {
+    width: 64px;
+    height: 92px;
+  }
+
+  .card--lg {
+    width: 112px;
+    height: 160px;
+  }
+
+  .trick {
+    min-height: 148px;
+  }
+
+  .trick__empty {
+    width: 96px;
+    height: 138px;
+    font-size: 2.6rem;
+  }
+
+  .trick__who {
+    max-width: 92px;
+    font-size: 0.78rem;
+  }
+
+  .hand {
+    min-height: 168px;
+  }
 }
