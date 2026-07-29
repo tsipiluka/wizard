@@ -958,7 +958,7 @@ button {
   position: absolute;
   right: 12px;
   /* clears the hand, the player bar and its separator, with breathing room */
-  bottom: calc(208px + env(safe-area-inset-bottom));
+  bottom: calc(221px + env(safe-area-inset-bottom));
   width: 46px;
   height: 46px;
   border-radius: 50%;
